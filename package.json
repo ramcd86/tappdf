@@ -1,0 +1,39 @@
+{
+  "name": "tappdf",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview",
+    "postinstall": "nuxt prepare",
+    "lint": "eslint .",
+    "typecheck": "nuxt typecheck"
+  },
+  "dependencies": {
+    "@stripe/stripe-js": "^4.0.0",
+    "@vercel/blob": "^0.23.0",
+    "@vercel/postgres": "^0.9.0",
+    "date-fns": "^3.0.0",
+    "drizzle-orm": "^0.33.0",
+    "fabric": "^6.0.0",
+    "nanoid": "^5.0.0",
+    "nuxt": "^3.13.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^4.0.0",
+    "stripe": "^16.0.0",
+    "vue": "^3.4.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@nuxt/eslint": "^0.5.0",
+    "@nuxtjs/tailwindcss": "^6.12.0",
+    "@types/node": "^22.0.0",
+    "drizzle-kit": "^0.24.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.5.0",
+    "vue-tsc": "^2.0.0"
+  }
+}
