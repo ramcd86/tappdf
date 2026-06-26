@@ -95,6 +95,28 @@ async function applyOverlaysToPage(
 }
 
 /**
+ * Split text into wrapped lines matching pdf-lib's maxWidth word-wrap behaviour.
+ * Used to position underline/strikethrough decorations per line.
+ */
+function getWrappedLines(text: string, font: any, fontSize: number, maxWidth: number): string[] {
+  const words = (text || '').split(' ')
+  const lines: string[] = []
+  let current = ''
+  for (const word of words) {
+    const test = current ? `${current} ${word}` : word
+    if (font.widthOfTextAtSize(test, fontSize) <= maxWidth || !current) {
+      current = test
+    }
+    else {
+      lines.push(current)
+      current = word
+    }
+  }
+  if (current) lines.push(current)
+  return lines.length ? lines : [text || '']
+}
+
+/**
  * Apply text overlay to page
  */
 async function applyTextOverlay(
@@ -104,7 +126,7 @@ async function applyTextOverlay(
   pageHeight: number
 ): Promise<void> {
   const { x, y, rotation = 0, data } = overlay
-  const { text, fontSize, color, fontStyle = '' } = data
+  const { text, fontSize, color, fontStyle = '', textDecoration = '' } = data
 
   // Choose font based on style
   let fontName = StandardFonts.Helvetica
@@ -117,9 +139,11 @@ async function applyTextOverlay(
   const font = await pdfDoc.embedFont(fontName)
 
   const rgbColor = hexToRgb(color || '#000000')
+  const textColor = rgb(rgbColor.r, rgbColor.g, rgbColor.b)
   const size = fontSize || 16
   const lineHeight = size * 1.25
   const textWidth = overlay.width || 200
+  const lineThickness = Math.max(0.5, size / 18)
 
   // PDF Y origin is bottom-left; Konva Y origin is top-left.
   const pdfY = pageHeight - y - size
@@ -129,11 +153,43 @@ async function applyTextOverlay(
     y: pdfY,
     size,
     font,
-    color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
+    color: textColor,
     rotate: degrees(-rotation),
     maxWidth: textWidth,
     lineHeight,
   })
+
+  // Underline and strikethrough must be drawn manually — pdf-lib has no textDecoration.
+  const needsUnderline = textDecoration.includes('underline')
+  const needsStrikethrough = textDecoration.includes('line-through')
+
+  if (needsUnderline || needsStrikethrough) {
+    const lines = getWrappedLines(text || '', font, size, textWidth)
+    lines.forEach((line, i) => {
+      const lineWidth = font.widthOfTextAtSize(line, size)
+      const baselineY = pdfY - i * lineHeight
+
+      if (needsUnderline) {
+        page.drawLine({
+          start: { x, y: baselineY - lineThickness },
+          end: { x: x + lineWidth, y: baselineY - lineThickness },
+          thickness: lineThickness,
+          color: textColor,
+        })
+      }
+
+      if (needsStrikethrough) {
+        // Strike at ~40% of cap height above baseline
+        const strikeY = baselineY + size * 0.28
+        page.drawLine({
+          start: { x, y: strikeY },
+          end: { x: x + lineWidth, y: strikeY },
+          thickness: lineThickness,
+          color: textColor,
+        })
+      }
+    })
+  }
 }
 
 /**

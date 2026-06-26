@@ -19,6 +19,8 @@ export interface TextOverlay extends OverlayObject {
     color: string
     fontWeight?: string
     fontStyle?: string
+    textDecoration?: string
+    align?: string
   }
 }
 
