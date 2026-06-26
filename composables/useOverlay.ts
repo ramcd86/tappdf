@@ -30,7 +30,6 @@ export function useOverlay() {
   // Konva stage and layers (not reactive to avoid proxy wrapping)
   let stage: Konva.Stage | null = null
   let layer: Konva.Layer | null = null
-  let clipGroup: Konva.Group | null = null   // content inside here is clipped to PDF page
   let transformer: Konva.Transformer | null = null
   let keyboardHandler: ((e: KeyboardEvent) => void) | null = null
   let activeTextarea: HTMLTextAreaElement | null = null
@@ -75,21 +74,9 @@ export function useOverlay() {
     })
     stageRef.value = stage
 
-    // Single layer for all content
+    // Single layer for all content and transformer
     layer = new Konva.Layer()
     stage.add(layer)
-
-    // Clipped group keeps overlay objects inside the PDF page boundary.
-    // The transformer is added directly to layer (outside the group) so its
-    // resize/rotate handles render even near the page edge.
-    // Using individual clip properties (not compound clip()) for reliable hit detection.
-    clipGroup = new Konva.Group({
-      clipX: 0,
-      clipY: 0,
-      clipWidth: width,
-      clipHeight: height,
-    })
-    layer.add(clipGroup)
 
     // Transformer for resize/rotate handles
     transformer = new Konva.Transformer({
@@ -175,7 +162,7 @@ export function useOverlay() {
    * Add text overlay
    */
   function addText(text: string = 'New Text', options?: any) {
-    if (!layer || !transformer || !clipGroup)
+    if (!layer || !transformer)
       return
 
     const textNode = new Konva.Text({
@@ -279,7 +266,7 @@ export function useOverlay() {
       textarea.addEventListener('blur', () => setTimeout(removeTextarea, 200))
     })
 
-    clipGroup.add(textNode)
+    layer.add(textNode)
     transformer.nodes([textNode])
     syncFormattingState(textNode)  // activate toolbar immediately on add
     layer.draw()
@@ -290,7 +277,7 @@ export function useOverlay() {
    * Add image overlay
    */
   async function addImage(imageUrl: string, options?: any) {
-    if (!layer || !transformer || !clipGroup)
+    if (!layer || !transformer)
       return
 
     return new Promise<void>((resolve, reject) => {
@@ -321,7 +308,7 @@ export function useOverlay() {
           transformer!.nodes([image])
         })
 
-        clipGroup!.add(image)
+        layer!.add(image)
         transformer!.nodes([image])
         layer!.draw()
         saveOverlays()
@@ -338,7 +325,7 @@ export function useOverlay() {
    * Add rectangle shape
    */
   function addRectangle(options?: any) {
-    if (!layer || !transformer || !clipGroup)
+    if (!layer || !transformer)
       return
 
     const rect = new Konva.Rect({
@@ -359,7 +346,7 @@ export function useOverlay() {
       transformer!.nodes([rect])
     })
 
-    clipGroup.add(rect)
+    layer.add(rect)
     transformer.nodes([rect])
     layer.draw()
     saveOverlays()
@@ -369,7 +356,7 @@ export function useOverlay() {
    * Add circle shape
    */
   function addCircle(options?: any) {
-    if (!layer || !transformer || !clipGroup)
+    if (!layer || !transformer)
       return
 
     const circle = new Konva.Circle({
@@ -389,7 +376,7 @@ export function useOverlay() {
       transformer!.nodes([circle])
     })
 
-    clipGroup.add(circle)
+    layer.add(circle)
     transformer.nodes([circle])
     layer.draw()
     saveOverlays()
@@ -399,7 +386,7 @@ export function useOverlay() {
    * Add highlight overlay
    */
   function addHighlight(options?: any) {
-    if (!layer || !transformer || !clipGroup)
+    if (!layer || !transformer)
       return
 
     const highlight = new Konva.Rect({
@@ -418,7 +405,7 @@ export function useOverlay() {
       transformer!.nodes([highlight])
     })
 
-    clipGroup.add(highlight)
+    layer.add(highlight)
     transformer.nodes([highlight])
     layer.draw()
     saveOverlays()
@@ -608,17 +595,12 @@ export function useOverlay() {
    * Convert Konva node to overlay format
    */
   function convertKonvaToOverlay(node: Konva.Node, index: number): OverlayObject {
-    // getAbsolutePosition() gives stage-space coordinates regardless of group nesting.
-    // node.x() / node.y() are local to the parent (clipGroup) which may differ if the
-    // group has any transform applied.
-    const absPos = node.getAbsolutePosition()
-
     const baseOverlay: OverlayObject = {
       id: node.id() || `obj-${index}-${Date.now()}`,
       page: state.currentPage,
       type: 'shape',
-      x: absPos.x,
-      y: absPos.y,
+      x: node.x(),
+      y: node.y(),
       width: node.width() * node.scaleX(),
       height: node.height() * node.scaleY(),
       rotation: node.rotation(),
@@ -779,7 +761,6 @@ export function useOverlay() {
       stage = null
     }
     layer = null
-    clipGroup = null
     transformer = null
     stageRef.value = null
     selectedFormatting.value = null
