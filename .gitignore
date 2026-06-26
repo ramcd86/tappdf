@@ -19,6 +19,8 @@ pnpm-debug.log*
 
 # OS
 .DS_Store
+Thumbs.db
+Desktop.ini
 .fleet
 .idea
 
@@ -48,6 +50,23 @@ pnpm-debug.log*
 *.db
 *.sqlite
 *.sqlite3
+
+# Local dev storage (uploaded files and mock DB — not for version control)
+.storage/
+
+# TypeScript build info
+*.tsbuildinfo
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Package manager locks (keep only one — we use npm)
+yarn.lock
+pnpm-lock.yaml
+
+# Windows reserved device names
+nul
 
 # Local storage (development)
 .storage/
