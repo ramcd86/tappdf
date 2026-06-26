@@ -144,3 +144,4 @@ credentials/
 *.tmproj
 *.tmproject
 .vscode-test
+nul
