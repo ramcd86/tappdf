@@ -19,6 +19,15 @@
         </p>
       </div>
       
+      <div v-else-if="errorMessage" class="space-y-4">
+        <div class="p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p class="text-sm text-red-800">{{ errorMessage }}</p>
+        </div>
+        <NuxtLink :to="`/editor?id=${documentId}`" class="btn-primary inline-block">
+          Back to Editor
+        </NuxtLink>
+      </div>
+
       <div v-else class="py-4">
         <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600 mx-auto" />
         <p class="text-sm text-gray-500 mt-2">Generating your PDF...</p>
@@ -36,18 +45,34 @@
 <script setup lang="ts">
 const route = useRoute()
 const downloadUrl = ref<string | null>(null)
+const errorMessage = ref<string | null>(null)
 const documentId = route.query.documentId as string
 
-// Poll for download URL after payment
 onMounted(async () => {
   if (!documentId) {
     navigateTo('/')
     return
   }
 
-  // TODO: Implement polling for PDF generation completion
-  // For now, simulate delay
-  await new Promise(resolve => setTimeout(resolve, 2000))
-  downloadUrl.value = `/api/download/${documentId}`
+  try {
+    const result = await $fetch<{ success: boolean; downloadUrl: string }>('/api/generate', {
+      method: 'POST',
+      body: { documentId },
+    })
+
+    if (result.downloadUrl) {
+      downloadUrl.value = result.downloadUrl
+      // Auto-trigger file download
+      const a = document.createElement('a')
+      a.href = result.downloadUrl
+      a.download = `tappdf-${documentId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+    }
+  }
+  catch (err: any) {
+    errorMessage.value = err.data?.message || 'Failed to generate your PDF. Please contact support.'
+  }
 })
 </script>

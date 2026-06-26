@@ -1,431 +1,212 @@
-# tapPDF - Technical Implementation Scaffolding
+# tapPDF - Implementation Plan
+**Project:** PDF Editor with Pay-to-Download | **Framework:** Nuxt 3.21.0
 
-## Project Setup
+---
 
-### Initial Dependencies
-```
-Core Framework:
-- nuxt 3.x
-- typescript
-- @nuxt/eslint
-- @nuxt/ui (optional, or shadcn-vue)
-
-PDF Handling:
-- pdfjs-dist
-- pdf-lib
-- fabric
-
-Payments:
-- @stripe/stripe-js
-- stripe (server SDK)
-
-Storage & Database:
-- @vercel/blob
-- @vercel/postgres
-- drizzle-orm (or prisma)
-
-Utilities:
-- zod (validation)
-- date-fns
-- nanoid
+## QUICK START
+```bash
+cd c:/_dev/tapPDF && npm run dev  # http://localhost:3000
 ```
 
 ---
 
-## Directory Structure
+## CURRENT STATUS — Jun 26, 2026
 
-```
-tapPDF/
-├── pages/
-│   ├── index.vue                 # Landing page
-│   ├── editor.vue                # Main PDF editor page
-│   └── payment-success.vue       # Post-payment redirect
-│
-├── components/
-│   ├── PDFViewer.vue            # PDF.js viewer wrapper
-│   ├── OverlayCanvas.vue        # Fabric.js canvas overlay
-│   ├── Toolbar.vue              # Edit tools (text, image, etc)
-│   ├── PageNavigator.vue        # Page selection/thumbnails
-│   ├── PaymentModal.vue         # Stripe payment element
-│   └── UploadZone.vue           # Drag & drop uploader
-│
-├── composables/
-│   ├── usePDF.ts                # PDF.js integration logic
-│   ├── useOverlay.ts            # Overlay state management
-│   ├── usePayment.ts            # Payment flow coordination
-│   └── useFileUpload.ts         # Upload handling
-│
-├── server/
-│   ├── api/
-│   │   ├── upload.post.ts       # File upload handler
-│   │   ├── payment/
-│   │   │   ├── create-intent.post.ts    # Stripe intent creation
-│   │   │   └── webhook.post.ts          # Stripe webhook handler
-│   │   ├── generate.post.ts     # PDF generation endpoint
-│   │   └── download/[id].get.ts # Signed download URL
-│   │
-│   ├── utils/
-│   │   ├── pdf-generator.ts     # pdf-lib wrapper
-│   │   ├── storage.ts           # Vercel Blob operations
-│   │   └── stripe.ts            # Stripe client singleton
-│   │
-│   └── db/
-│       ├── schema.ts            # Database schema (Drizzle/Prisma)
-│       └── client.ts            # DB connection
-│
-├── types/
-│   ├── overlay.ts               # Overlay JSON schema types
-│   ├── document.ts              # Document metadata types
-│   └── payment.ts               # Payment types
-│
-├── public/
-│   └── pdf.worker.js            # PDF.js worker (copied from node_modules)
-│
-└── nuxt.config.ts
-```
+**Phase 1 complete.** Full end-to-end flow is working in dev/mock mode:
+create PDF → add text/shapes/highlights → save → simulate payment → download PDF with overlays embedded.
+
+### What Works
+- ✅ Home page: create blank A4 PDF or upload existing PDF
+- ✅ PDF rendering via PDF.js on canvas
+- ✅ Konva.js overlay canvas: text, rectangle, circle, highlight — all with drag/resize/rotate handles
+- ✅ Text formatting toolbar: bold, italic, underline, strikethrough, font family, size, colour
+- ✅ Overlay state synced on every add/modify; serialized before payment via `POST /api/overlay/:id`
+- ✅ Mock DB persists across Nitro hot-reloads (`.storage/mock-db.json`)
+- ✅ PaymentModal: server signals `isMock` flag; dev mode shows "Simulate Payment & Download"
+- ✅ Mock payment: saves overlays → `/api/generate` → bakes overlays into PDF → file download
+- ✅ Real Stripe payment: payment intent → Stripe Elements → redirects to `/payment-success` → auto-download
+- ✅ Text overlays appear in downloaded PDF (Helvetica/Bold/Italic/BoldItalic via pdf-lib StandardFonts)
+- ✅ Rectangle and circle shape overlays appear in downloaded PDF
+- ✅ Highlight overlays appear in downloaded PDF
+- ✅ Local filesystem storage (dev) / Vercel Blob (prod) dual-mode
+- ✅ In-memory + file-persisted DB (dev) / Vercel Postgres (prod) dual-mode
+
+### Known Issues (to fix in Phase 2)
+- ⚠️ Circle overlay x/y in PDF is offset — Konva Circle x/y is already the centre; pdf-generator adds `width/2` again
+- ⚠️ Text Y position uses `fontSize` as height offset; true position depends on font descenders
+- ⚠️ Custom fonts not supported (pdf-lib only has Helvetica, Times, Courier StandardFonts)
+- ⚠️ Image overlay button exists in toolbar but has no upload mechanism
+- ⚠️ Zoom +/- buttons update UI counter only; do not re-render canvas or resize Konva stage
+- ⚠️ PageNavigator is UI-only; page switching does not change the Konva overlay layer
+- ⚠️ No undo/redo
 
 ---
 
-## Database Schema (SQL)
+## PHASE 2 — Robustness
 
-```sql
-CREATE TABLE documents (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    upload_path TEXT NOT NULL,
-    overlay_path TEXT,
-    final_path TEXT,
-    payment_status VARCHAR(20) DEFAULT 'pending',
-    created_at TIMESTAMPTZ DEFAULT NOW(),
-    expires_at TIMESTAMPTZ NOT NULL
-);
+### 2.1 Circle Overlay Coordinate Fix *(15 min)*
+**File:** `server/utils/pdf-generator.ts`
 
-CREATE INDEX idx_documents_expires ON documents(expires_at);
+Konva.Circle stores x/y at the centre. `applyShapeOverlay` currently adds `width/2` to x, doubling the offset.
 
-CREATE TABLE payments (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    stripe_intent_id TEXT UNIQUE NOT NULL,
-    document_id UUID REFERENCES documents(id),
-    amount INTEGER NOT NULL,
-    currency VARCHAR(3) DEFAULT 'eur',
-    status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE INDEX idx_payments_stripe ON payments(stripe_intent_id);
-CREATE INDEX idx_payments_document ON payments(document_id);
+```typescript
+// Fix in applyShapeOverlay for shapeType === 'circle':
+page.drawEllipse({
+  x: x,              // already the centre — remove + width / 2
+  y: pdfY + height / 2,
+  xScale: width / 2,
+  yScale: height / 2,
+  ...
+})
 ```
+
+### 2.2 Image Overlay Upload Flow *(60 min)*
+**New file:** `server/api/image-upload.post.ts`  
+**Modify:** `components/Toolbar.vue`, `composables/useOverlay.ts`
+
+1. "Add Image" button triggers `<input type="file" accept="image/*">` (hidden)
+2. On select: POST image to `/api/image-upload` → store in `.storage/` → return URL
+3. Call `overlay.addImage(url)` — already implemented, just needs the URL
+4. `applyImageOverlay` in pdf-generator.ts fetches the URL and embeds JPEG/PNG
+
+### 2.3 Zoom / Scale Support *(45 min)*
+**Files:** `pages/editor.vue`, `composables/usePDF.ts`, `components/OverlayCanvas.vue`
+
+1. `usePDF.zoomIn()` / `zoomOut()` already update `state.scale`; also re-render the PDF canvas
+2. `PDFViewer` must emit new dimensions on scale change; `OverlayCanvas` resizes its Konva stage
+3. Overlay objects need `canvasScale` metadata so pdf-generator can invert the scale when baking
+
+### 2.4 Multi-Page PDF Support *(90 min)*
+**Files:** `components/PageNavigator.vue`, `composables/useOverlay.ts`
+
+- `PageNavigator` calls `overlay.setPage(n)` on prev/next click
+- `setPage(n)` serializes current-page overlays, clears stage, loads overlays for new page
+- All overlay objects already carry `page: number`; pdf-generator already groups by page — backend is ready
+
+### 2.5 Undo / Redo *(60 min)*
+**File:** `composables/useOverlay.ts`
+
+```typescript
+const history: string[] = []
+const historyIndex = ref(-1)
+
+// After every saveOverlays():
+history.splice(historyIndex.value + 1)  // discard redo stack
+history.push(JSON.stringify(state.objects))
+historyIndex.value = history.length - 1
+
+function undo() { /* load history[--historyIndex] */ }
+function redo() { /* load history[++historyIndex] */ }
+```
+Wire Ctrl+Z / Ctrl+Y in the existing keyboard handler. Limit stack to 20 entries.
+
+### 2.6 Toast Notifications *(30 min)*
+**New:** `composables/useToast.ts`, toast component in `app.vue`
+
+Replace silent `console.error` failures with user-visible toasts:
+- Upload failure, generate failure, network errors
+- "PDF downloaded successfully" on completion
+
+### 2.7 Mobile Layout *(45 min)*
+- Toolbar collapses to a bottom bar on screens < 768px
+- Konva stage supports pinch-to-zoom via native pointer events
 
 ---
 
-## TypeScript Type Definitions
+## PHASE 3 — Production
 
-```typescript
-// types/overlay.ts
-export interface OverlayObject {
-  id: string
-  page: number
-  type: 'text' | 'image' | 'shape' | 'highlight' | 'drawing'
-  x: number
-  y: number
-  width?: number
-  height?: number
-  rotation?: number
-  data: Record<string, any>
-}
-
-export interface TextOverlay extends OverlayObject {
-  type: 'text'
-  data: {
-    text: string
-    fontSize: number
-    fontFamily?: string
-    color: string
-  }
-}
-
-export interface ImageOverlay extends OverlayObject {
-  type: 'image'
-  data: {
-    src: string
-    opacity?: number
-  }
-}
-
-export interface OverlayState {
-  objects: OverlayObject[]
-  currentPage: number
-  totalPages: number
-}
-
-// types/document.ts
-export interface Document {
-  id: string
-  uploadPath: string
-  overlayPath: string | null
-  finalPath: string | null
-  paymentStatus: 'pending' | 'paid' | 'failed'
-  createdAt: Date
-  expiresAt: Date
-}
-
-// types/payment.ts
-export interface Payment {
-  id: string
-  stripeIntentId: string
-  documentId: string
-  amount: number
-  currency: string
-  status: string
-  createdAt: Date
-}
+### 3.1 Real Stripe Setup
 ```
-
----
-
-## Core API Endpoints
-
-### POST /api/upload
-**Purpose:** Accept PDF file, store in Blob, create document record
-
-```typescript
-Request:
-- multipart/form-data with PDF file
-
-Response:
-{
-  documentId: string
-  uploadUrl: string
-  expiresAt: string
-}
-```
-
-### POST /api/payment/create-intent
-**Purpose:** Create Stripe PaymentIntent for document export
-
-```typescript
-Request:
-{
-  documentId: string
-  overlayData: OverlayObject[]
-}
-
-Response:
-{
-  clientSecret: string
-  paymentIntentId: string
-}
-```
-
-### POST /api/payment/webhook
-**Purpose:** Receive Stripe webhook events, trigger PDF generation
-
-```typescript
-Request:
-- Stripe webhook payload
-
-Actions:
-- Verify webhook signature
-- Update payment status
-- Trigger PDF generation if payment succeeded
-```
-
-### POST /api/generate
-**Purpose:** Generate final PDF with overlays (called after payment verification)
-
-```typescript
-Request:
-{
-  documentId: string
-}
-
-Response:
-{
-  downloadUrl: string
-  expiresAt: string
-}
-```
-
-### GET /api/download/[id]
-**Purpose:** Return signed download URL or redirect to blob
-
-```typescript
-Response:
-- Redirect to signed Blob URL
-- Or direct file stream
-```
-
----
-
-## Implementation Phases
-
-### Phase 0: Project Setup ✅
-- [x] Set up Nuxt 3 project
-- [x] Install core dependencies
-- [x] Configure Tailwind CSS
-- [x] Create nuxt.config.ts with runtime config
-- [x] Initialize git repository
-- [x] Create .gitignore and .env.example
-
-### Phase 1: Core Upload & Viewing
-- [ ] Create directory structure
-- [ ] Configure Vercel Blob storage
-- [ ] Implement file upload endpoint
-- [ ] Integrate PDF.js for rendering
-- [ ] Basic page navigation
-
-### Phase 2: Overlay Editing
-- [ ] Integrate Fabric.js canvas
-- [ ] Implement text tool
-- [ ] Implement image upload tool
-- [ ] Object selection & manipulation
-- [ ] Overlay state management
-- [ ] Auto-save overlay JSON
-
-### Phase 3: Payment Integration
-- [ ] Set up Stripe account
-- [ ] Configure webhook endpoint
-- [ ] Implement payment intent creation
-- [ ] Build payment modal UI
-- [ ] Test webhook flow
-
-### Phase 4: PDF Generation
-- [ ] Implement pdf-lib generation logic
-- [ ] Apply overlay objects to PDF
-- [ ] Store generated PDF in Blob
-- [ ] Create signed download URLs
-
-### Phase 5: Database & Cleanup
-- [ ] Set up Vercel Postgres
-- [ ] Implement schema
-- [ ] Add document/payment tracking
-- [ ] Create cleanup cron job
-
-### Phase 6: Polish & Testing
-- [ ] Error handling
-- [ ] Loading states
-- [ ] Mobile responsiveness
-- [ ] E2E payment testing
-- [ ] Performance optimization
-
----
-
-## Environment Variables
-
-```env
-# Stripe
-STRIPE_SECRET_KEY=sk_test_...
-STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_SECRET_KEY=sk_live_...
+NUXT_PUBLIC_STRIPE_PUBLISHABLE_KEY=pk_live_...
 STRIPE_WEBHOOK_SECRET=whsec_...
+```
+The `isMock` flag deactivates automatically when a real key is present. No code changes needed.
 
-# Vercel Storage
+### 3.2 Vercel Blob + Postgres
+```
 BLOB_READ_WRITE_TOKEN=vercel_blob_...
-POSTGRES_URL=postgres://...
-POSTGRES_PRISMA_URL=postgres://...
-POSTGRES_URL_NON_POOLING=postgres://...
+POSTGRES_URL=postgresql://...
+```
+Both are already dual-mode. Add a Nitro plugin that runs `CREATE TABLE IF NOT EXISTS documents (...)` on first cold start.
 
-# App Config
-BASE_URL=http://localhost:3000
-PAYMENT_AMOUNT=99  # cents
-PAYMENT_CURRENCY=eur
-FILE_EXPIRY_HOURS=24
+### 3.3 Rate Limiting
+- Nitro middleware: 10 uploads/IP/hour, 5 payment attempts/IP/hour
+- Use `x-forwarded-for` header (set by Vercel)
+
+### 3.4 Cleanup Cron
+```json
+// vercel.json
+{ "crons": [{ "path": "/api/cleanup", "schedule": "0 * * * *" }] }
+```
+New endpoint deletes documents + files older than 24 hours.
+
+### 3.5 Security Hardening
+- Complete Stripe webhook signature verification in `payment/webhook.post.ts` (`stripe.webhooks.constructEvent()`)
+- Document ownership check on `/api/download/:id` — add signed token or short-lived session
+- `Content-Security-Policy` header in `nuxt.config.ts`
+- Sanitize user text before embedding in PDF (strip control characters)
+
+---
+
+## FILE STATUS
+
+```
+pages/
+  index.vue                   ✅ Complete
+  editor.vue                  ✅ Complete
+  payment-success.vue         ✅ Complete
+
+components/
+  UploadZone.vue              ✅ Complete
+  PDFViewer.vue               ✅ Complete
+  OverlayCanvas.vue           ✅ Complete
+  Toolbar.vue                 ✅ Complete (image upload not wired — Phase 2.2)
+  PageNavigator.vue           ⚠️ UI only, overlay not wired — Phase 2.4
+  PaymentModal.vue            ✅ Complete (mock + real Stripe)
+
+composables/
+  useFileUpload.ts            ✅ Complete
+  usePDF.ts                   ✅ Complete (zoom re-render not wired — Phase 2.3)
+  useOverlay.ts               ✅ Complete (no undo/redo — Phase 2.5)
+  usePayment.ts               ✅ Complete
+
+server/api/
+  upload.post.ts              ✅ Complete
+  create-blank.post.ts        ✅ Complete
+  generate.post.ts            ✅ Complete
+  download/[id].get.ts        ✅ Complete
+  document/[id].get.ts        ✅ Complete
+  storage/[filename].get.ts   ✅ Complete
+  overlay/[id].post.ts        ✅ Complete
+  payment/create-intent       ✅ Complete
+  payment/webhook.post.ts     ⚠️ Webhook sig verification incomplete — Phase 3.5
+  image-upload.post.ts        ❌ Does not exist — Phase 2.2
+
+server/
+  db/client.ts                ✅ Complete (dual-mode, hot-reload safe)
+  db/schema.ts                ⚠️ No Postgres auto-init — Phase 3.2
+  utils/pdf-generator.ts      ✅ Functional (circle coord bug — Phase 2.1)
+  utils/storage.ts            ✅ Complete
+  utils/stripe.ts             ✅ Complete
+
+types/
+  overlay.ts                  ✅ Complete
+  document.ts                 ✅ Complete
+  payment.ts                  ✅ Complete
 ```
 
 ---
 
-## Critical Implementation Notes
+## TECHNICAL DEBT
 
-### PDF.js Integration
-- Must copy worker file to public directory
-- Use canvas rendering mode (not SVG)
-- Calculate proper scale for responsive viewing
-- Handle async page loading
-
-### Fabric.js Canvas
-- One canvas per PDF page
-- Sync dimensions with PDF.js rendered size
-- Serialize/deserialize to JSON for persistence
-- Handle z-index layering
-
-### PDF Generation with pdf-lib
-- Load original PDF
-- Iterate overlay objects by page
-- Draw each object type appropriately
-- Handle coordinate transformation
-- Flatten to single output PDF
-
-### Stripe Webhooks
-- MUST verify signature
-- Handle idempotency
-- Process asynchronously
-- Update database atomically
-
-### Blob Storage
-- Use unique IDs for filenames
-- Set appropriate expiry times
-- Clean up failed uploads
-- Handle concurrent access
-
-### Security Considerations
-- Validate file types server-side
-- Limit file size (e.g., 10MB)
-- Sanitize overlay data
-- Rate limit upload endpoint
-- Verify payment before generation
-- Sign download URLs with expiry
-
----
-
-## Testing Strategy
-
-### Unit Tests
-- Overlay serialization/deserialization
-- PDF coordinate calculations
-- Payment flow state machine
-
-### Integration Tests
-- Upload → Edit → Payment → Download flow
-- Webhook handling
-- File cleanup
-
-### E2E Tests
-- Complete user journey
-- Payment success/failure scenarios
-- Mobile device testing
-
----
-
-## Performance Targets
-
-- Initial page load: < 2s
-- PDF upload: < 5s for 5MB file
-- PDF rendering: < 1s per page
-- Payment processing: < 3s
-- PDF generation: < 5s
-- Download initiation: < 1s
-
----
-
-## Deployment Checklist
-
-- [ ] Configure Vercel project
-- [ ] Set up production Stripe account
-- [ ] Configure webhook URL in Stripe dashboard
-- [ ] Set all environment variables
-- [ ] Test payment flow in production
-- [ ] Set up cron job for cleanup
-- [ ] Configure custom domain
-- [ ] Enable error tracking (Sentry)
-- [ ] Set up basic analytics
-
----
-
-## Future Technical Enhancements
-
-- WebAssembly PDF processing for performance
-- Service worker for offline editing
-- Progressive Web App capabilities
-- CDN caching for static assets
-- Database connection pooling optimization
-- Batch PDF processing
-- Real-time collaboration (WebSockets)
-- Advanced PDF operations (merge, split, compress)
+| Issue | Severity | File | Fix |
+|-------|----------|------|-----|
+| Circle x/y double-offset in generated PDF | High | pdf-generator.ts | Remove `+ width/2` for circle x |
+| Text Y offset uses fontSize not line height | Medium | pdf-generator.ts | Use `font.heightAtSize(size)` |
+| Zoom controls cosmetic only | Medium | editor.vue, usePDF | Re-render + resize Konva on scale change |
+| PageNavigator not wired to overlays | Medium | PageNavigator.vue | Call `overlay.setPage()` |
+| `fabric` still in package.json | Low | package.json | `npm uninstall fabric` |
+| `any` types in useOverlay / editor.vue | Low | Multiple | Add proper Konva node type wrappers |
+| Text state polling via setInterval 300ms | Low | editor.vue | Replace with Konva event → defineExpose |
+| Stripe webhook signature not verified | Medium | payment/webhook.post.ts | Complete `constructEvent()` call |

@@ -20,7 +20,27 @@
           Upload a PDF, make your edits, and download for just €0.99. No account needed.
         </p>
         
-        <UploadZone />
+        <div class="space-y-4">
+          <button
+            class="btn-primary w-full max-w-md mx-auto block"
+            @click="createBlankPDF"
+            :disabled="creating"
+          >
+            <span v-if="!creating">Create New PDF (A4)</span>
+            <span v-else>Creating...</span>
+          </button>
+          
+          <div class="relative">
+            <div class="absolute inset-0 flex items-center">
+              <div class="w-full border-t border-gray-300" />
+            </div>
+            <div class="relative flex justify-center text-sm">
+              <span class="px-2 bg-white text-gray-500">or</span>
+            </div>
+          </div>
+          
+          <UploadZone />
+        </div>
 
         <div class="mt-8 pt-8 border-t border-gray-200">
           <h3 class="text-lg font-medium mb-4">How it works</h3>
@@ -52,5 +72,25 @@
 </template>
 
 <script setup lang="ts">
-// Landing page - upload and introduction
+const creating = ref(false)
+
+async function createBlankPDF() {
+  try {
+    creating.value = true
+    const response = await $fetch('/api/create-blank', {
+      method: 'POST',
+      body: { pages: 1, pageSize: 'A4' },
+    })
+    
+    // Navigate to editor with new document
+    navigateTo(`/editor?id=${response.documentId}`)
+  }
+  catch (error) {
+    console.error('Failed to create blank PDF:', error)
+    alert('Failed to create PDF. Please try again.')
+  }
+  finally {
+    creating.value = false
+  }
+}
 </script>

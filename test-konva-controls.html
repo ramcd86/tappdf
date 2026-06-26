@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Konva.js Control Test</title>
+  <script src="https://unpkg.com/konva@9/konva.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+      background: #f3f4f6;
+    }
+    #container {
+      border: 2px solid #3b82f6;
+      background: white;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    .controls {
+      margin-bottom: 20px;
+      padding: 15px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    button {
+      padding: 10px 20px;
+      margin-right: 10px;
+      margin-bottom: 10px;
+      border: none;
+      background: #3b82f6;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    button:hover {
+      background: #2563eb;
+    }
+    .status {
+      margin-top: 20px;
+      padding: 15px;
+      background: #f0fdf4;
+      border: 1px solid #86efac;
+      border-radius: 8px;
+      font-size: 14px;
+    }
+    h1 {
+      color: #1f2937;
+    }
+    h2 {
+      color: #4b5563;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎨 Konva.js Control Handle Test</h1>
+  <p><strong>Goal:</strong> Verify that resize/rotate handles work correctly</p>
+  
+  <div class="controls">
+    <h2>Add Objects</h2>
+    <button onclick="addText()">Add Text</button>
+    <button onclick="addRectangle()">Add Rectangle</button>
+    <button onclick="addCircle()">Add Circle</button>
+    <button onclick="deleteSelected()">Delete Selected</button>
+  </div>
+
+  <div id="container"></div>
+
+  <div class="status">
+    <h2>Status Messages</h2>
+    <div id="status">Ready. Click buttons above to add objects.</div>
+  </div>
+
+  <script>
+    // Create stage
+    const stage = new Konva.Stage({
+      container: 'container',
+      width: 800,
+      height: 600
+    });
+
+    // Create layer
+    const layer = new Konva.Layer();
+    stage.add(layer);
+
+    // Create transformer (for resize/rotate handles)
+    const transformer = new Konva.Transformer({
+      nodes: [],
+      rotateEnabled: true,
+      resizeEnabled: true,
+      borderStroke: '#3b82f6',
+      borderStrokeWidth: 2,
+      anchorFill: '#3b82f6',
+      anchorStroke: '#fff',
+      anchorSize: 12,
+      anchorCornerRadius: 6,
+    });
+    layer.add(transformer);
+
+    // Status logging
+    function log(message) {
+      const statusDiv = document.getElementById('status');
+      const timestamp = new Date().toLocaleTimeString();
+      statusDiv.innerHTML = `[${timestamp}] ${message}<br>${statusDiv.innerHTML}`;
+    }
+
+    // Add text
+    function addText() {
+      const text = new Konva.Text({
+        x: 100,
+        y: 100,
+        text: 'Drag me! Resize me!',
+        fontSize: 24,
+        fontFamily: 'Arial',
+        fill: '#000000',
+        draggable: true,
+        name: 'object'
+      });
+
+      text.on('click tap', () => {
+        transformer.nodes([text]);
+        log('✅ Text selected - Try resizing/rotating!');
+      });
+
+      text.on('transform', () => {
+        log('🔄 Text transforming - width: ' + Math.round(text.width() * text.scaleX()) + 'px');
+      });
+
+      layer.add(text);
+      layer.draw();
+      
+      // Auto-select new object
+      transformer.nodes([text]);
+      log('✨ Text added and selected');
+    }
+
+    // Add rectangle
+    function addRectangle() {
+      const rect = new Konva.Rect({
+        x: 150,
+        y: 150,
+        width: 200,
+        height: 100,
+        fill: 'transparent',
+        stroke: '#000000',
+        strokeWidth: 2,
+        draggable: true,
+        name: 'object'
+      });
+
+      rect.on('click tap', () => {
+        transformer.nodes([rect]);
+        log('✅ Rectangle selected - Try resizing/rotating!');
+      });
+
+      rect.on('transform', () => {
+        log('🔄 Rectangle transforming - size: ' + Math.round(rect.width() * rect.scaleX()) + 'x' + Math.round(rect.height() * rect.scaleY()));
+      });
+
+      layer.add(rect);
+      layer.draw();
+      
+      transformer.nodes([rect]);
+      log('✨ Rectangle added and selected');
+    }
+
+    // Add circle
+    function addCircle() {
+      const circle = new Konva.Circle({
+        x: 250,
+        y: 250,
+        radius: 50,
+        fill: 'transparent',
+        stroke: '#000000',
+        strokeWidth: 2,
+        draggable: true,
+        name: 'object'
+      });
+
+      circle.on('click tap', () => {
+        transformer.nodes([circle]);
+        log('✅ Circle selected - Try resizing/rotating!');
+      });
+
+      circle.on('transform', () => {
+        log('🔄 Circle transforming - radius: ' + Math.round(circle.radius() * circle.scaleX()) + 'px');
+      });
+
+      layer.add(circle);
+      layer.draw();
+      
+      transformer.nodes([circle]);
+      log('✨ Circle added and selected');
+    }
+
+    // Delete selected
+    function deleteSelected() {
+      const nodes = transformer.nodes();
+      if (nodes.length > 0) {
+        nodes.forEach(node => node.destroy());
+        transformer.nodes([]);
+        layer.draw();
+        log('🗑️ Deleted selected object');
+      } else {
+        log('⚠️ No object selected');
+      }
+    }
+
+    // Click on empty area to deselect
+    stage.on('click tap', (e) => {
+      if (e.target === stage) {
+        transformer.nodes([]);
+        layer.draw();
+        log('👆 Clicked background - deselected');
+      }
+    });
+
+    log('🚀 Konva.js initialized - Canvas ready!');
+  </script>
+</body>
+</html>

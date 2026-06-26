@@ -28,71 +28,144 @@
           </div>
         </div>
 
-        <!-- Stripe Payment Element will be mounted here -->
-        <div ref="paymentElement" class="mb-6" />
+        <!-- Dev / mock mode -->
+        <div v-if="isMockMode" class="space-y-3">
+          <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p class="text-xs text-yellow-800 font-medium">Dev mode — Stripe not configured. Using mock payment.</p>
+          </div>
+          <button class="w-full btn-primary py-3" @click="handleMockPayment">
+            Simulate Payment &amp; Download
+          </button>
+        </div>
 
-        <button
-          class="w-full btn-primary py-3"
-          :disabled="!canPay"
-          @click="handlePayment"
-        >
-          Pay €0.99
-        </button>
-
-        <p class="text-xs text-gray-500 text-center mt-4">
-          Secure payment powered by Stripe
-        </p>
+        <!-- Real Stripe mode -->
+        <template v-else>
+          <div id="stripe-payment-element" ref="paymentElementRef" class="mb-6 min-h-[100px]" />
+          <button
+            class="w-full btn-primary py-3"
+            :disabled="!canPay"
+            @click="handleStripePayment"
+          >
+            Pay €0.99
+          </button>
+          <p class="text-xs text-gray-500 text-center mt-4">
+            Secure payment powered by Stripe
+          </p>
+        </template>
       </div>
 
       <div v-else class="py-8 text-center">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
-        <p class="text-sm text-gray-600">Processing payment...</p>
+        <p class="text-sm text-gray-600">{{ processingMessage }}</p>
       </div>
 
-      <div v-if="error" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-        <p class="text-sm text-red-800">{{ error }}</p>
+      <div v-if="errorMessage" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+        <p class="text-sm text-red-800">{{ errorMessage }}</p>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-// Stripe payment modal
+const props = defineProps<{
+  documentId?: string
+}>()
+
+const payment = usePayment()
+
 const isOpen = ref(false)
 const processing = ref(false)
+const processingMessage = ref('Processing payment...')
 const canPay = ref(false)
-const error = ref<string | null>(null)
-const paymentElement = ref<HTMLElement | null>(null)
+const errorMessage = ref<string | null>(null)
+const paymentElementRef = ref<HTMLElement | null>(null)
 
-const open = () => {
+const isMockMode = ref(false)
+
+async function open() {
   isOpen.value = true
-  // TODO: Initialize Stripe payment element
-}
+  errorMessage.value = null
+  canPay.value = false
+  processing.value = false
+  isMockMode.value = false
 
-const close = () => {
-  if (!processing.value) {
-    isOpen.value = false
-    error.value = null
+  if (props.documentId) {
+    const success = await payment.createPaymentIntent(props.documentId, [])
+    if (!success) {
+      errorMessage.value = payment.state.error || 'Failed to initialize payment'
+      return
+    }
+    isMockMode.value = payment.state.isMock
+  } else {
+    isMockMode.value = true
+  }
+
+  if (!isMockMode.value) {
+    await nextTick()
+    if (paymentElementRef.value) {
+      const elements = await payment.createPaymentElement('stripe-payment-element')
+      if (elements) {
+        const el = elements.getElement('payment')
+        el?.on('change', (e: any) => { canPay.value = e.complete })
+      }
+    }
+  } else {
+    canPay.value = true
   }
 }
 
-const handlePayment = async () => {
+function close() {
+  if (!processing.value) {
+    isOpen.value = false
+    errorMessage.value = null
+  }
+}
+
+async function handleMockPayment() {
+  if (!props.documentId) return
   processing.value = true
-  error.value = null
+  processingMessage.value = 'Generating your PDF...'
+  errorMessage.value = null
 
   try {
-    // TODO: Implement Stripe payment confirmation
-    // 1. Confirm payment with Stripe
-    // 2. Wait for webhook confirmation
-    // 3. Redirect to success page
-    await new Promise(resolve => setTimeout(resolve, 2000))
-  } catch (err) {
-    error.value = 'Payment failed. Please try again.'
-    console.error('Payment error:', err)
-  } finally {
+    const result = await $fetch<{ success: boolean; downloadUrl: string }>('/api/generate', {
+      method: 'POST',
+      body: { documentId: props.documentId },
+    })
+    if (result.downloadUrl) {
+      processingMessage.value = 'Download starting...'
+      const a = document.createElement('a')
+      a.href = result.downloadUrl
+      a.download = `tappdf-${props.documentId}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      await new Promise(resolve => setTimeout(resolve, 500))
+      close()
+    }
+  }
+  catch (err: any) {
+    errorMessage.value = err.data?.message || 'Failed to generate PDF. Please try again.'
+  }
+  finally {
     processing.value = false
   }
 }
 
-defineExpose({ open })
+async function handleStripePayment() {
+  processing.value = true
+  processingMessage.value = 'Processing payment...'
+  errorMessage.value = null
+
+  const returnUrl = `${window.location.origin}/payment-success?documentId=${props.documentId}`
+  const success = await payment.submitPayment(returnUrl)
+
+  if (!success) {
+    errorMessage.value = payment.state.error || 'Payment failed. Please try again.'
+    processing.value = false
+  }
+  // On success Stripe redirects to returnUrl automatically
+}
+
+defineExpose({ open, close })
 </script>

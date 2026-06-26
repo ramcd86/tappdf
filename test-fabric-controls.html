@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Fabric.js v5 Controls Test</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.0/fabric.min.js"></script>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: Arial, sans-serif;
+    }
+    #canvas-container {
+      border: 2px solid #ccc;
+      display: inline-block;
+    }
+    canvas {
+      display: block;
+    }
+  </style>
+</head>
+<body>
+  <h1>Fabric.js v5.3.0 Controls Test</h1>
+  <p>Click the text box, then try to resize/rotate using the corner handles</p>
+  
+  <div id="canvas-container">
+    <canvas id="testCanvas" width="600" height="400"></canvas>
+  </div>
+
+  <script>
+    // Initialize Fabric.js canvas
+    const canvas = new fabric.Canvas('testCanvas', {
+      backgroundColor: '#f0f0f0',
+      selection: true
+    });
+
+    // Add a textbox with all locks disabled
+    const textbox = new fabric.Textbox('Test Text - Try to resize me!', {
+      left: 100,
+      top: 100,
+      width: 200,
+      fontSize: 24,
+      fill: '#000000',
+      fontFamily: 'Arial',
+      editable: true,
+      selectable: true,
+      hasControls: true,
+      hasBorders: true,
+      lockMovementX: false,
+      lockMovementY: false,
+      lockScalingX: false,
+      lockScalingY: false,
+      lockRotation: false,
+      lockUniScaling: false,
+      cornerSize: 12,
+      transparentCorners: false,
+      cornerColor: '#2563eb',
+      cornerStrokeColor: '#1e40af',
+      borderColor: '#2563eb',
+      cornerStyle: 'circle',
+      borderScaleFactor: 2
+    });
+
+    canvas.add(textbox);
+    canvas.setActiveObject(textbox);
+    canvas.renderAll();
+
+    // Log events
+    canvas.on('object:scaling', (e) => {
+      console.log('✅ SCALING EVENT:', e.target.type, 'scaleX:', e.target.scaleX, 'scaleY:', e.target.scaleY);
+    });
+
+    canvas.on('object:rotating', (e) => {
+      console.log('✅ ROTATING EVENT:', e.target.type, 'angle:', e.target.angle);
+    });
+
+    canvas.on('object:moving', (e) => {
+      console.log('✅ MOVING EVENT:', e.target.type);
+    });
+
+    canvas.on('mouse:down', (e) => {
+      console.log('Mouse down:', e.target ? e.target.type : 'background');
+    });
+
+    console.log('Textbox properties:', {
+      hasControls: textbox.hasControls,
+      selectable: textbox.selectable,
+      evented: textbox.evented,
+      lockScalingX: textbox.lockScalingX,
+      lockScalingY: textbox.lockScalingY,
+      lockRotation: textbox.lockRotation
+    });
+  </script>
+</body>
+</html>
