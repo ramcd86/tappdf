@@ -1,17 +1,36 @@
 <template>
-  <div class="min-h-screen flex flex-col">
-    <header class="bg-white border-b border-gray-200 sticky top-0 z-50">
+  <div class="h-screen flex flex-col overflow-hidden">
+    <header class="bg-gray-900 sticky top-0 z-50">
       <div class="max-w-full px-4 py-3 flex items-center justify-between">
-        <NuxtLink to="/" class="text-xl font-bold text-gray-900">
+        <NuxtLink
+          to="/"
+          class="logo-text"
+        >
           tapPDF
         </NuxtLink>
-        
+
         <div class="flex items-center gap-4">
           <PageNavigator />
-          <button 
+          <button
+            class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-300"
+            :disabled="isAddingPage || !documentId"
+            @click="handleAddPage"
+          >
+            <span v-if="isAddingPage">Adding...</span>
+            <span v-else>+ Add Page</span>
+          </button>
+          <button
+            class="px-3 py-1 text-sm rounded text-pink-400 hover:bg-pink-900/20 disabled:opacity-50"
+            :disabled="isDeletingPage || pdf.state.totalPages <= 1 || pdf.state.currentPage === 1 || !documentId"
+            @click="handleDeletePage"
+          >
+            <span v-if="isDeletingPage">Deleting...</span>
+            <span v-else>Delete Page</span>
+          </button>
+          <button
             class="btn-primary"
-            @click="handleDownload"
             :disabled="!documentId || isDownloading"
+            @click="handleDownload"
           >
             <span v-if="isDownloading">Saving...</span>
             <span v-else>Save &amp; Download</span>
@@ -19,164 +38,221 @@
         </div>
       </div>
 
-      <!-- Text Formatting Bar (always present) -->
-      <div 
-        class="border-t border-gray-200 bg-gray-50 px-4 py-2 flex items-center gap-4 h-[50px]"
-      >
+      <!-- Formatting Bar -->
+      <div class="bg-gray-800 px-4 py-2 flex items-center gap-4 h-[50px]">
         <template v-if="textFormatting">
-          <span class="text-xs font-medium text-gray-600 uppercase">Text Format:</span>
-        
-        <!-- Style Buttons -->
-        <div class="flex gap-1">
-          <button
-            class="px-3 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500 text-primary-700': textFormatting.isBold }"
-            @click="handleToggleTextStyle('bold')"
-            title="Bold"
-          >
-            <span class="font-bold">B</span>
-          </button>
-          <button
-            class="px-3 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500 text-primary-700': textFormatting.isItalic }"
-            @click="handleToggleTextStyle('italic')"
-            title="Italic"
-          >
-            <span class="italic">I</span>
-          </button>
-          <button
-            class="px-3 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500 text-primary-700': textFormatting.isUnderline }"
-            @click="handleToggleTextDecoration('underline')"
-            title="Underline"
-          >
-            <span class="underline">U</span>
-          </button>
-          <button
-            class="px-3 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500 text-primary-700': textFormatting.isStrikethrough }"
-            @click="handleToggleTextDecoration('line-through')"
-            title="Strikethrough"
-          >
-            <span class="line-through">S</span>
-          </button>
-        </div>
+          <span class="text-xs font-medium text-gray-400 uppercase">Text Format:</span>
 
-        <div class="w-px h-6 bg-gray-300"></div>
+          <!-- Style Buttons -->
+          <div class="flex gap-1">
+            <button
+              title="Bold"
+              class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isBold }"
+              @click="handleToggleTextStyle('bold')"
+            >
+              <span class="font-bold">B</span>
+            </button>
+            <button
+              title="Italic"
+              class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isItalic }"
+              @click="handleToggleTextStyle('italic')"
+            >
+              <span class="italic">I</span>
+            </button>
+            <button
+              title="Underline"
+              class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isUnderline }"
+              @click="handleToggleTextDecoration('underline')"
+            >
+              <span class="underline">U</span>
+            </button>
+            <button
+              title="Strikethrough"
+              class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isStrikethrough }"
+              @click="handleToggleTextDecoration('line-through')"
+            >
+              <span class="line-through">S</span>
+            </button>
+          </div>
 
-        <!-- Alignment Buttons -->
-        <div class="flex gap-1">
-          <button
-            class="px-2 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500': textFormatting.align === 'left' }"
-            @click="handleUpdateTextFormatting({ align: 'left' })"
-            title="Align Left"
+          <div class="w-px h-6 bg-gray-600" />
+
+          <!-- Alignment Buttons -->
+          <div class="flex gap-1">
+            <button
+              title="Align Left"
+              class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'left' }"
+              @click="handleUpdateTextFormatting({ align: 'left' })"
+            >
+              ⬅️
+            </button>
+            <button
+              title="Align Center"
+              class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'center' }"
+              @click="handleUpdateTextFormatting({ align: 'center' })"
+            >
+              ↔️
+            </button>
+            <button
+              title="Align Right"
+              class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+              :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'right' }"
+              @click="handleUpdateTextFormatting({ align: 'right' })"
+            >
+              ➡️
+            </button>
+          </div>
+
+          <div class="w-px h-6 bg-gray-600" />
+
+          <!-- Font Family Selector -->
+          <select
+            :value="textFormatting.fontFamily || 'Arial'"
+            class="px-3 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+            @change="handleFontChange"
           >
-            ⬅️
-          </button>
-          <button
-            class="px-2 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500': textFormatting.align === 'center' }"
-            @click="handleUpdateTextFormatting({ align: 'center' })"
-            title="Align Center"
+            <option
+              v-for="font in fontFamilies"
+              :key="font"
+              :value="font"
+            >
+              {{ font }}
+            </option>
+          </select>
+
+          <!-- Font Size -->
+          <select
+            title="Font Size"
+            :value="textFormatting.fontSize || 16"
+            class="px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+            @change="handleFontSizeChange"
           >
-            ↔️
-          </button>
-          <button
-            class="px-2 py-1 text-sm border rounded hover:bg-white transition-colors"
-            :class="{ 'bg-white border-primary-500': textFormatting.align === 'right' }"
-            @click="handleUpdateTextFormatting({ align: 'right' })"
-            title="Align Right"
+            <option
+              v-for="size in fontSizes"
+              :key="size"
+              :value="size"
+            >
+              {{ size }}
+            </option>
+          </select>
+
+          <!-- Text Color -->
+          <input
+            title="Text Color"
+            type="color"
+            :value="textFormatting.color || '#000000'"
+            class="w-10 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+            @input="handleColorChange"
           >
-            ➡️
-          </button>
-        </div>
-
-        <div class="w-px h-6 bg-gray-300"></div>
-
-        <!-- Font Family Selector -->
-        <select
-          :value="textFormatting.fontFamily || 'Arial'"
-          class="px-3 py-1 text-sm border border-gray-300 rounded bg-white"
-          @change="handleFontChange"
-        >
-          <option value="Arial">Arial</option>
-          <option value="Helvetica">Helvetica</option>
-          <option value="Times New Roman">Times New Roman</option>
-          <option value="Georgia">Georgia</option>
-          <option value="Courier New">Courier New</option>
-          <option value="Verdana">Verdana</option>
-          <option value="Tahoma">Tahoma</option>
-          <option value="Trebuchet MS">Trebuchet MS</option>
-          <option value="Comic Sans MS">Comic Sans MS</option>
-          <option value="Impact">Impact</option>
-        </select>
-
-        <!-- Font Size -->
-        <select
-          :value="textFormatting.fontSize || 16"
-          class="px-2 py-1 text-sm border border-gray-300 rounded bg-white"
-          title="Font Size"
-          @change="handleFontSizeChange"
-        >
-          <option value="8">8</option>
-          <option value="10">10</option>
-          <option value="12">12</option>
-          <option value="14">14</option>
-          <option value="16">16</option>
-          <option value="18">18</option>
-          <option value="20">20</option>
-          <option value="24">24</option>
-          <option value="28">28</option>
-          <option value="32">32</option>
-          <option value="36">36</option>
-          <option value="48">48</option>
-          <option value="64">64</option>
-          <option value="72">72</option>
-          <option value="96">96</option>
-        </select>
-
-        <!-- Text Color -->
-        <input
-          :value="textFormatting.color || '#000000'"
-          type="color"
-          class="w-10 h-8 border border-gray-300 rounded cursor-pointer"
-          title="Text Color"
-          @input="handleColorChange"
-        >
         </template>
-        <span v-else class="text-xs text-gray-400 italic">Select an element to see formatting options</span>
+
+        <template v-else-if="shapeFormatting">
+          <span class="text-xs font-medium text-gray-400 uppercase">Shape:</span>
+
+          <!-- Stroke colour -->
+          <label class="text-xs text-gray-400">Stroke</label>
+          <input
+            title="Stroke colour"
+            type="color"
+            :value="shapeFormatting.strokeColor"
+            class="w-8 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+            @input="handleShapeStrokeColor"
+          >
+
+          <div class="w-px h-6 bg-gray-600" />
+
+          <!-- Stroke width -->
+          <label class="text-xs text-gray-400">Thickness</label>
+          <input
+            :value="shapeFormatting.strokeWidth"
+            type="range"
+            min="1"
+            max="20"
+            step="0.5"
+            class="w-28"
+            @input="handleShapeStrokeWidth"
+          >
+          <span class="text-xs text-gray-500 w-5 text-right">{{ shapeFormatting.strokeWidth }}</span>
+
+          <div class="w-px h-6 bg-gray-600" />
+
+          <!-- Fill (not for lines) -->
+          <template v-if="shapeFormatting.shapeType !== 'line'">
+            <div class="w-px h-6 bg-gray-600" />
+            <label class="text-xs text-gray-400">Fill</label>
+            <input
+              title="Toggle fill"
+              type="checkbox"
+              :checked="shapeFormatting.fillColor !== 'transparent'"
+              @change="handleShapeFillToggle"
+            >
+            <input
+              v-if="shapeFormatting.fillColor !== 'transparent'"
+              title="Fill colour"
+              type="color"
+              :value="shapeFormatting.fillColor"
+              class="w-8 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+              @input="handleShapeFillColor"
+            >
+          </template>
+        </template>
+
+        <span
+          v-else
+          class="text-xs text-gray-500 italic flex items-center gap-3"
+        >
+          <span>Page background:</span>
+          <input
+            title="Page background colour"
+            type="color"
+            :value="pageBackground"
+            class="w-8 h-7 border border-gray-600 rounded cursor-pointer bg-gray-700"
+            @input="handlePageBackgroundChange"
+          >
+          <button
+            class="px-2 py-0.5 text-xs border border-gray-600 rounded text-gray-400 hover:bg-gray-700"
+            @click="handlePageBackgroundChange({ target: { value: '#ffffff' } } as unknown as Event)"
+          >
+            Reset
+          </button>
+        </span>
       </div>
     </header>
 
-    <div class="flex-1 flex">
+    <div class="flex-1 flex overflow-hidden">
       <!-- Toolbar -->
-      <aside class="w-64 bg-white border-r border-gray-200 p-4">
-        <Toolbar 
+      <aside class="w-64 bg-gray-900 p-4 overflow-y-auto flex-shrink-0">
+        <Toolbar
           @add-text="handleAddText"
           @add-image="handleAddImage"
           @add-shape="handleAddShape"
           @add-highlight="handleAddHighlight"
-          @delete-selected="handleDeleteSelected"
-          @export-json="handleExportJSON"
+          @select-mode="handleSelectMode"
         />
       </aside>
 
       <!-- Main editor area -->
-      <main class="flex-1 bg-gray-100 overflow-auto">
+      <main class="flex-1 bg-gray-950 overflow-auto">
         <div class="p-8">
           <div class="flex justify-center">
             <div class="relative inline-block">
-              <PDFViewer 
+              <PDFViewer
                 v-if="documentId"
                 :document-id="documentId"
                 @loaded="handlePDFLoaded"
               />
-              <OverlayCanvas 
+              <OverlayCanvas
                 v-if="pdfDimensions.width > 0"
                 ref="overlayCanvas"
                 :width="pdfDimensions.width"
                 :height="pdfDimensions.height"
+                :scale="pdfScale"
               />
             </div>
           </div>
@@ -184,12 +260,15 @@
       </main>
     </div>
 
-    <PaymentModal ref="paymentModal" :document-id="documentId || ''" />
+    <PaymentModal
+      ref="paymentModal"
+      :document-id="documentId || ''"
+    />
   </div>
 </template>
 
 <script setup lang="ts">
-import { selectedFormattingState } from '~/composables/useOverlay'
+import { selectedFormattingState, selectedShapeFormattingState, currentPageBackgroundState } from '~/composables/useOverlay'
 
 const route = useRoute()
 const documentId = route.query.id as string
@@ -198,17 +277,57 @@ if (!documentId) {
   navigateTo('/')
 }
 
-const overlayCanvas = ref<any>(null)
-const paymentModal = ref<any>(null)
-const pdfDimensions = ref({ width: 0, height: 0 })
-const isDownloading = ref(false)
-
-// Module-level singleton ref \u2014 reacts to Konva click events with zero component-boundary friction
-const textFormatting = selectedFormattingState
-
-function handlePDFLoaded(dimensions: { width: number; height: number }) {
-  pdfDimensions.value = dimensions
+interface OverlayCanvasRef {
+  switchPage(page: number): void
+  deletePageOverlays(pageIndex: number): void
+  addText(text: string, options?: Record<string, unknown>): void
+  addImage(url: string): void
+  addRectangle(options?: Record<string, unknown>): void
+  addCircle(options?: Record<string, unknown>): void
+  addLine(options?: Record<string, unknown>): void
+  addTriangle(options?: Record<string, unknown>): void
+  addHighlight(options?: Record<string, unknown>): void
+  deleteSelected(): void
+  setSelectMode(active: boolean): void
+  setPageBackground(color: string): void
+  updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }): void
+  toggleTextStyle(style: string): void
+  toggleTextDecoration(decoration: string): void
+  updateTextFormatting(props: Record<string, unknown>): void
+  updateTextColor(color: string): void
+  getOverlaysJSON(): string
 }
+
+interface PaymentModalRef {
+  open(): void
+}
+
+const overlayCanvas = ref<OverlayCanvasRef | null>(null)
+const paymentModal = ref<PaymentModalRef | null>(null)
+const pdfDimensions = ref({ width: 0, height: 0 })
+const pdfScale = ref(1)
+const isDownloading = ref(false)
+const isAddingPage = ref(false)
+const isDeletingPage = ref(false)
+
+const pdf = usePDF()
+const textFormatting = selectedFormattingState
+const shapeFormatting = selectedShapeFormattingState
+const pageBackground = currentPageBackgroundState
+
+const fontFamilies = ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS', 'Impact']
+const fontSizes = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
+
+function handlePDFLoaded(dimensions: { width: number, height: number, scale: number }) {
+  pdfDimensions.value = { width: dimensions.width, height: dimensions.height }
+  pdfScale.value = dimensions.scale
+}
+
+// When the PDF page changes, switch the overlay canvas to show only that page's elements
+watch(() => pdf.state.currentPage, (newPage) => {
+  if (newPage <= 0 || !overlayCanvas.value) return
+  overlayCanvas.value?.switchPage(newPage - 1) // PDF page is 1-indexed, overlay is 0-indexed
+}, { immediate: false })
 
 function handleToggleTextStyle(style: 'bold' | 'italic') {
   overlayCanvas.value?.toggleTextStyle(style)
@@ -218,10 +337,9 @@ function handleToggleTextDecoration(decoration: 'underline' | 'line-through') {
   overlayCanvas.value?.toggleTextDecoration(decoration)
 }
 
-function handleUpdateTextFormatting(properties: any) {
+function handleUpdateTextFormatting(properties: Record<string, unknown>) {
   overlayCanvas.value?.updateTextFormatting(properties)
 }
-
 
 function handleFontChange(event: Event) {
   const target = event.target as HTMLSelectElement
@@ -238,7 +356,7 @@ function handleColorChange(event: Event) {
   overlayCanvas.value?.updateTextColor(target.value)
 }
 
-function handleAddText(options: { fontSize: number; color: string }) {
+function handleAddText(options: { fontSize: number, color: string }) {
   if (!overlayCanvas.value) {
     console.error('❌ overlayCanvas ref is null!')
     return
@@ -253,12 +371,18 @@ function handleAddImage(imageUrl: string) {
   overlayCanvas.value?.addImage(imageUrl)
 }
 
-function handleAddShape(type: 'rectangle' | 'circle') {
+function handleAddShape(type: 'rectangle' | 'circle' | 'triangle' | 'line') {
   if (type === 'rectangle') {
     overlayCanvas.value?.addRectangle()
   }
-  else {
+  else if (type === 'circle') {
     overlayCanvas.value?.addCircle()
+  }
+  else if (type === 'triangle') {
+    overlayCanvas.value?.addTriangle()
+  }
+  else if (type === 'line') {
+    overlayCanvas.value?.addLine()
   }
 }
 
@@ -266,22 +390,80 @@ function handleAddHighlight() {
   overlayCanvas.value?.addHighlight()
 }
 
-function handleDeleteSelected() {
-  overlayCanvas.value?.deleteSelected()
+function handleSelectMode(active: boolean) {
+  overlayCanvas.value?.setSelectMode(active)
 }
 
-function handleExportJSON() {
-  const json = overlayCanvas.value?.getOverlaysJSON()
-  if (json) {
-    console.log('Overlay JSON:', json)
-    // Could download or show in modal
-    const blob = new Blob([json], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = 'overlays.json'
-    a.click()
+function handlePageBackgroundChange(event: Event) {
+  overlayCanvas.value?.setPageBackground((event.target as HTMLInputElement).value)
+}
+
+async function handleAddPage() {
+  if (!documentId) return
+  isAddingPage.value = true
+  try {
+    const result = await $fetch<{ pageCount: number }>(`/api/document/${documentId}/add-page`, { method: 'POST' })
+    if (result.pageCount && pdf.state.url) {
+      // Reload PDF with cache-bust then navigate to the new last page
+      await pdf.loadPDF(pdf.state.url + '?t=' + Date.now())
+      pdf.goToPage(result.pageCount)
+    }
   }
+  catch (error) {
+    console.error('Failed to add page:', error)
+  }
+  finally {
+    isAddingPage.value = false
+  }
+}
+
+async function handleDeletePage() {
+  if (!documentId || pdf.state.totalPages <= 1) return
+  isDeletingPage.value = true
+  try {
+    const pageIndex = pdf.state.currentPage - 1 // convert to 0-based
+    overlayCanvas.value?.deletePageOverlays(pageIndex)
+    const result = await $fetch<{ pageCount: number }>(`/api/document/${documentId}/delete-page`, {
+      method: 'POST',
+      body: { pageIndex },
+    })
+    if (result.pageCount && pdf.state.url) {
+      const targetPage = Math.min(pdf.state.currentPage, result.pageCount)
+      await pdf.loadPDF(pdf.state.url + '?t=' + Date.now())
+      pdf.goToPage(targetPage)
+      // Explicitly switch the overlay canvas to the target page — necessary when
+      // currentPage doesn't change value (e.g. deleting page 2 while on page 1)
+      // because the watcher only fires on value changes.
+      await nextTick()
+      overlayCanvas.value?.switchPage(targetPage - 1)
+    }
+  }
+  catch (error) {
+    console.error('Failed to delete page:', error)
+  }
+  finally {
+    isDeletingPage.value = false
+  }
+}
+
+function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }) {
+  overlayCanvas.value?.updateShapeFormatting(props)
+}
+
+function handleShapeStrokeColor(event: Event) {
+  handleUpdateShapeFormatting({ strokeColor: (event.target as HTMLInputElement).value })
+}
+
+function handleShapeStrokeWidth(event: Event) {
+  handleUpdateShapeFormatting({ strokeWidth: parseFloat((event.target as HTMLInputElement).value) })
+}
+
+function handleShapeFillToggle(event: Event) {
+  handleUpdateShapeFormatting({ fillColor: (event.target as HTMLInputElement).checked ? '#ffffff' : 'transparent' })
+}
+
+function handleShapeFillColor(event: Event) {
+  handleUpdateShapeFormatting({ fillColor: (event.target as HTMLInputElement).value })
 }
 
 async function handleDownload() {

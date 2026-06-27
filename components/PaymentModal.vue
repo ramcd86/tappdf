@@ -1,17 +1,17 @@
 <template>
   <div
     v-if="isOpen"
-    class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+    class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50"
     @click.self="close"
   >
-    <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4 p-6">
+    <div class="bg-gray-800 rounded-lg shadow-xl max-w-md w-full mx-4 p-6 border border-gray-700">
       <div class="flex justify-between items-start mb-6">
         <div>
-          <h2 class="text-2xl font-bold text-gray-900">Download PDF</h2>
-          <p class="text-sm text-gray-600 mt-1">One-time payment • No subscription</p>
+          <h2 class="text-2xl font-bold text-gray-100">Download PDF</h2>
+          <p class="text-sm text-gray-400 mt-1">One-time payment • No subscription</p>
         </div>
         <button
-          class="text-gray-400 hover:text-gray-600"
+          class="text-gray-500 hover:text-gray-300"
           @click="close"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -21,17 +21,17 @@
       </div>
 
       <div v-if="!processing">
-        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+        <div class="mb-6 p-4 bg-gray-700 rounded-lg">
           <div class="flex justify-between items-center">
-            <span class="text-sm text-gray-600">Total</span>
-            <span class="text-2xl font-bold text-gray-900">€0.99</span>
+            <span class="text-sm text-gray-400">Total</span>
+            <span class="text-2xl font-bold text-gray-100">€0.99</span>
           </div>
         </div>
 
         <!-- Dev / mock mode -->
         <div v-if="isMockMode" class="space-y-3">
-          <div class="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-            <p class="text-xs text-yellow-800 font-medium">Dev mode — Stripe not configured. Using mock payment.</p>
+          <div class="p-3 bg-yellow-900/40 border border-yellow-700 rounded-lg">
+            <p class="text-xs text-yellow-300 font-medium">Dev mode — Stripe not configured. Using mock payment.</p>
           </div>
           <button class="w-full btn-primary py-3" @click="handleMockPayment">
             Simulate Payment &amp; Download
@@ -42,8 +42,8 @@
         <template v-else>
           <div id="stripe-payment-element" ref="paymentElementRef" class="mb-6 min-h-[100px]" />
           <button
-            class="w-full btn-primary py-3"
             :disabled="!canPay"
+            class="w-full btn-primary py-3"
             @click="handleStripePayment"
           >
             Pay €0.99
@@ -55,12 +55,12 @@
       </div>
 
       <div v-else class="py-8 text-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600 mx-auto mb-4" />
-        <p class="text-sm text-gray-600">{{ processingMessage }}</p>
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto mb-4" />
+        <p class="text-sm text-gray-400">{{ processingMessage }}</p>
       </div>
 
-      <div v-if="errorMessage" class="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-        <p class="text-sm text-red-800">{{ errorMessage }}</p>
+      <div v-if="errorMessage" class="mt-4 p-3 bg-red-900/30 border border-red-700 rounded-lg">
+        <p class="text-sm text-red-300">{{ errorMessage }}</p>
       </div>
     </div>
   </div>

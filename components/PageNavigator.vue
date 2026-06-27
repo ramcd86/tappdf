@@ -1,38 +1,40 @@
 <template>
   <div class="flex items-center gap-3">
     <button
-      class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-      :disabled="currentPage <= 1"
-      @click="previousPage"
+      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+      :disabled="pdf.state.currentPage <= 1"
+      @click="pdf.previousPage()"
     >
       ←
     </button>
-    
-    <span class="text-sm text-gray-600">
-      Page {{ currentPage }} of {{ totalPages }}
+
+    <span class="text-sm text-gray-400">
+      Page {{ pdf.state.currentPage }} of {{ pdf.state.totalPages }}
     </span>
-    
+
     <button
-      class="px-3 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50"
-      :disabled="currentPage >= totalPages"
-      @click="nextPage"
+      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+      :disabled="pdf.state.currentPage >= pdf.state.totalPages"
+      @click="pdf.nextPage()"
     >
       →
     </button>
 
     <div class="ml-4 flex items-center gap-2">
       <button
-        class="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-        @click="zoomOut"
+        class="px-2 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+        :disabled="pdf.state.scale <= 0.5"
+        @click="pdf.zoomOut()"
       >
-        -
+        −
       </button>
-      <span class="text-sm text-gray-600 min-w-[50px] text-center">
-        {{ Math.round(zoom * 100) }}%
+      <span class="text-sm text-gray-400 min-w-[50px] text-center">
+        {{ Math.round(pdf.state.scale * 100) }}%
       </span>
       <button
-        class="px-2 py-1 text-sm border border-gray-300 rounded hover:bg-gray-50"
-        @click="zoomIn"
+        class="px-2 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+        :disabled="pdf.state.scale >= 3.0"
+        @click="pdf.zoomIn()"
       >
         +
       </button>
@@ -41,35 +43,5 @@
 </template>
 
 <script setup lang="ts">
-const currentPage = ref(1)
-const totalPages = ref(1)
-const zoom = ref(1.0)
-
-const previousPage = () => {
-  if (currentPage.value > 1) {
-    currentPage.value--
-    // TODO: Scroll to page
-  }
-}
-
-const nextPage = () => {
-  if (currentPage.value < totalPages.value) {
-    currentPage.value++
-    // TODO: Scroll to page
-  }
-}
-
-const zoomIn = () => {
-  if (zoom.value < 2.0) {
-    zoom.value = Math.min(2.0, zoom.value + 0.1)
-    // TODO: Apply zoom to PDF viewer
-  }
-}
-
-const zoomOut = () => {
-  if (zoom.value > 0.5) {
-    zoom.value = Math.max(0.5, zoom.value - 0.1)
-    // TODO: Apply zoom to PDF viewer
-  }
-}
+const pdf = usePDF()
 </script>

@@ -12,19 +12,30 @@ export interface PDFState {
   scale: number
   loading: boolean
   error: string | null
+  url: string | null
 }
+
+// Module-level singleton — shared across all components
+const _state = reactive<PDFState>({
+  currentPage: 1,
+  totalPages: 0,
+  scale: 1.0,
+  loading: false,
+  error: null,
+  url: null,
+})
+let _pdfDocument: PDFDocumentProxy | null = null
+// Track the active PDF.js render task so we can cancel it before starting a new one
+let _currentRenderTask: { cancel: () => void } | null = null
 
 export function usePDF() {
   // Keep PDF document separate from reactive state to avoid proxy issues
-  let pdfDocument: PDFDocumentProxy | null = null
+  const pdfDocument = {
+    get value() { return _pdfDocument },
+    set value(v) { _pdfDocument = v },
+  }
   
-  const state = reactive<PDFState>({
-    currentPage: 1,
-    totalPages: 0,
-    scale: 1.0,
-    loading: false,
-    error: null,
-  })
+  const state = _state
 
   // Configure PDF.js worker
   if (process.client) {
@@ -42,9 +53,10 @@ export function usePDF() {
       const loadingTask = pdfjsLib.getDocument(url)
       const pdfDoc = await loadingTask.promise
 
-      pdfDocument = pdfDoc
+      pdfDocument.value = pdfDoc
       state.totalPages = pdfDoc.numPages
       state.currentPage = 1
+      state.url = url
 
       return true
     }
@@ -62,12 +74,12 @@ export function usePDF() {
    * Get a specific page
    */
   async function getPage(pageNumber: number): Promise<PDFPageProxy | null> {
-    if (!pdfDocument || pageNumber < 1 || pageNumber > state.totalPages) {
+    if (!pdfDocument.value || pageNumber < 1 || pageNumber > state.totalPages) {
       return null
     }
 
     try {
-      return await pdfDocument.getPage(pageNumber)
+      return await pdfDocument.value.getPage(pageNumber)
     }
     catch (error) {
       console.error('Failed to get page:', error)
@@ -83,6 +95,12 @@ export function usePDF() {
     canvas: HTMLCanvasElement,
     scale: number = state.scale,
   ): Promise<boolean> {
+    // Cancel any render that is still in progress on this canvas
+    if (_currentRenderTask) {
+      _currentRenderTask.cancel()
+      _currentRenderTask = null
+    }
+
     const page = await getPage(pageNumber)
     if (!page)
       return false
@@ -99,15 +117,19 @@ export function usePDF() {
       canvas.width = viewport.width
       canvas.height = viewport.height
 
-      const renderContext = {
-        canvasContext: context,
-        viewport,
-      }
+      const renderTask = page.render({ canvasContext: context, viewport })
+      _currentRenderTask = renderTask
 
-      await page.render(renderContext).promise
+      await renderTask.promise
+      _currentRenderTask = null
       return true
     }
-    catch (error) {
+    catch (error: unknown) {
+      _currentRenderTask = null
+      // RenderingCancelledException is expected when a new render supersedes this one
+      if ((error as { name?: string })?.name === 'RenderingCancelledException') {
+        return false
+      }
       console.error('Failed to render page:', error)
       return false
     }
@@ -187,13 +209,14 @@ export function usePDF() {
    * Unload PDF and cleanup
    */
   async function unload() {
-    if (pdfDocument) {
-      await pdfDocument.destroy()
-      pdfDocument = null
+    if (pdfDocument.value) {
+      await pdfDocument.value.destroy()
+      pdfDocument.value = null
     }
     state.currentPage = 1
     state.totalPages = 0
     state.error = null
+    state.url = null
   }
 
   return {

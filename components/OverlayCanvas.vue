@@ -8,6 +8,7 @@
 const props = defineProps<{
   width?: number
   height?: number
+  scale?: number
 }>()
 
 const overlay = useOverlay()
@@ -28,11 +29,11 @@ onMounted(() => {
 })
 
 // Re-initialize only if dimensions change significantly
-watch(() => [props.width, props.height], ([width, height]) => {
+watch(() => [props.width, props.height, props.scale], ([width, height, scale]) => {
   if (containerRef.value && width && height && isInitialized.value && overlay.stage.value) {
-    // Resize existing stage
-    overlay.stage.value.width(width)
-    overlay.stage.value.height(height)
+    overlay.stage.value.width(width as number)
+    overlay.stage.value.height(height as number)
+    overlay.stage.value.scale({ x: (scale as number) || 1, y: (scale as number) || 1 })
     overlay.stage.value.draw()
   }
 })
@@ -48,6 +49,8 @@ defineExpose({
   addImage: overlay.addImage,
   addRectangle: overlay.addRectangle,
   addCircle: overlay.addCircle,
+  addLine: overlay.addLine,
+  addTriangle: overlay.addTriangle,
   addHighlight: overlay.addHighlight,
   deleteSelected: overlay.deleteSelected,
   getOverlaysJSON: overlay.getOverlaysJSON,
@@ -57,6 +60,11 @@ defineExpose({
   toggleTextDecoration: overlay.toggleTextDecoration,
   updateTextFormatting: overlay.updateTextFormatting,
   updateTextColor: overlay.updateTextColor,
+  updateShapeFormatting: overlay.updateShapeFormatting,
+  setSelectMode: overlay.setSelectMode,
+  setPageBackground: overlay.setPageBackground,
+  switchPage: overlay.switchPage,
+  deletePageOverlays: overlay.deletePageOverlays,
 })
 </script>
 
@@ -76,7 +84,7 @@ defineExpose({
 }
 
 .konva-container :deep(canvas) {
-  border: 2px solid rgba(59, 130, 246, 0.5);
+  border: 2px solid rgba(168, 85, 247, 0.5);
   background: rgba(255, 0, 0, 0.05); /* Slight red tint to see canvas area */
 }
 </style>

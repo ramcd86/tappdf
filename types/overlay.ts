@@ -1,7 +1,7 @@
 export interface OverlayObject {
   id: string
   page: number
-  type: 'text' | 'image' | 'shape' | 'highlight' | 'drawing'
+  type: 'text' | 'image' | 'shape' | 'highlight' | 'drawing' | 'background'
   x: number
   y: number
   width?: number

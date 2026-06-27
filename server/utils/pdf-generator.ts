@@ -60,17 +60,22 @@ async function applyOverlaysToPage(
   overlays: OverlayObject[]
 ): Promise<void> {
   const { width: pageWidth, height: pageHeight } = page.getSize()
-  
-  // Sort overlays by z-index if available
+
+  // Background overlays must render first (below everything else)
   const sortedOverlays = [...overlays].sort((a, b) => {
+    if (a.type === 'background') return -1
+    if (b.type === 'background') return 1
     const zIndexA = (a.data as any).zIndex || 0
     const zIndexB = (b.data as any).zIndex || 0
     return zIndexA - zIndexB
   })
-  
+
   for (const overlay of sortedOverlays) {
     try {
       switch (overlay.type) {
+        case 'background':
+          applyBackgroundOverlay(page, overlay, pageWidth, pageHeight)
+          break
         case 'text':
           await applyTextOverlay(pdfDoc, page, overlay as TextOverlay, pageHeight)
           break
@@ -84,7 +89,6 @@ async function applyOverlaysToPage(
           await applyShapeOverlay(page, overlay, pageHeight)
           break
         case 'drawing':
-          // Drawing overlays could be complex - implement if needed
           console.warn('Drawing overlays not yet implemented')
           break
       }
@@ -253,6 +257,27 @@ async function applyImageOverlay(
 }
 
 /**
+ * Apply page background colour — drawn as a full-page rectangle before all other content.
+ */
+function applyBackgroundOverlay(
+  page: PDFPage,
+  overlay: OverlayObject,
+  pageWidth: number,
+  pageHeight: number,
+): void {
+  const color = (overlay.data.color as string) || '#ffffff'
+  if (color === 'transparent') return
+  const { r, g, b } = hexToRgb(color)
+  page.drawRectangle({
+    x: 0,
+    y: 0,
+    width: pageWidth,
+    height: pageHeight,
+    color: rgb(r, g, b),
+  })
+}
+
+/**
  * Apply highlight overlay to page
  */
 async function applyHighlightOverlay(
@@ -316,9 +341,11 @@ async function applyShapeOverlay(
     })
   }
   else if (shapeType === 'circle') {
+    // x and y from Konva.Circle are already the center coordinates,
+    // so just flip the Y axis — do not add width/height offsets.
     page.drawEllipse({
-      x: x + width / 2,
-      y: pdfY + height / 2,
+      x,
+      y: pageHeight - y,
       xScale: width / 2,
       yScale: height / 2,
       borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
@@ -326,6 +353,47 @@ async function applyShapeOverlay(
       color: fillColor,
       rotate: degrees(-rotation),
     })
+  }
+  else if (shapeType === 'line' || shapeType === 'triangle') {
+    // Points are in Konva local coords; rotation is applied around (x, y).
+    const points: number[] = data.points || (shapeType === 'line' ? [0, 0, 200, 0] : [50, 0, 100, 86, 0, 86])
+    const rot = (rotation * Math.PI) / 180
+    const cosR = Math.cos(rot)
+    const sinR = Math.sin(rot)
+
+    // Convert a local point to Konva world coords, then to PDF coords.
+    // Konva world: (x + px*cosR - py*sinR,  y + px*sinR + py*cosR)
+    // PDF coords:  world_x stays same, pdf_y = pageHeight - world_y
+    const toWorld = (px: number, py: number) => ({
+      wx: x + px * cosR - py * sinR,
+      wy: y + px * sinR + py * cosR,
+    })
+
+    if (shapeType === 'line') {
+      const s = toWorld(points[0], points[1])
+      const e = toWorld(points[2], points[3])
+      page.drawLine({
+        start: { x: s.wx, y: pageHeight - s.wy },
+        end: { x: e.wx, y: pageHeight - e.wy },
+        thickness: strokeWidth,
+        color: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+      })
+    }
+    else {
+      // Triangle — use drawSvgPath with SVG origin at page top-left.
+      // Setting x:0, y:pageHeight maps SVG coords (y down) to Konva canvas coords.
+      const v1 = toWorld(points[0], points[1])
+      const v2 = toWorld(points[2], points[3])
+      const v3 = toWorld(points[4], points[5])
+      const pathStr = `M ${v1.wx.toFixed(2)} ${v1.wy.toFixed(2)} L ${v2.wx.toFixed(2)} ${v2.wy.toFixed(2)} L ${v3.wx.toFixed(2)} ${v3.wy.toFixed(2)} Z`
+      page.drawSvgPath(pathStr, {
+        x: 0,
+        y: pageHeight,
+        color: fillColor,
+        borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+        borderWidth: strokeWidth,
+      })
+    }
   }
 }
 

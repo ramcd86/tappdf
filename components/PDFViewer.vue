@@ -32,7 +32,7 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  loaded: [dimensions: { width: number; height: number }]
+  loaded: [dimensions: { width: number; height: number; scale: number }]
 }>()
 
 const pdf = usePDF()
@@ -64,13 +64,16 @@ onMounted(async () => {
     await nextTick()
     
     if (canvasRef.value && pdf.state.totalPages > 0) {
-      // Render first page
-      await pdf.renderPage(1, canvasRef.value)
+      // Render first page at current scale
+      await pdf.renderPage(1, canvasRef.value, pdf.state.scale)
       
-      // Emit dimensions for overlay canvas
-      const dims = await pdf.getPageDimensions(1)
-      if (dims) {
-        emit('loaded', dims)
+      // Emit actual rendered canvas dimensions + scale
+      if (canvasRef.value) {
+        emit('loaded', {
+          width: canvasRef.value.width,
+          height: canvasRef.value.height,
+          scale: pdf.state.scale,
+        })
       }
     }
   }
@@ -80,10 +83,35 @@ onMounted(async () => {
   }
 })
 
-// Watch for page changes and re-render
-watch(() => pdf.state.currentPage, async (newPage) => {
+// Watch for page OR scale changes and re-render
+watch([() => pdf.state.currentPage, () => pdf.state.scale], async ([newPage, newScale]) => {
   if (canvasRef.value && newPage > 0) {
-    await pdf.renderPage(newPage, canvasRef.value)
+    await pdf.renderPage(newPage, canvasRef.value, newScale)
+    if (canvasRef.value) {
+      emit('loaded', {
+        width: canvasRef.value.width,
+        height: canvasRef.value.height,
+        scale: newScale,
+      })
+    }
+  }
+})
+
+// When loadPDF finishes, state.loading flips false and the <canvas> element is
+// recreated fresh at browser-default 300×150. Re-render onto the new element
+// regardless of whether currentPage changed.
+watch(() => pdf.state.loading, async (isLoading) => {
+  if (isLoading || !pdf.state.currentPage) return
+  await nextTick()  // let Vue restore the canvas ref after the v-else re-mounts
+  if (canvasRef.value && pdf.state.currentPage > 0) {
+    await pdf.renderPage(pdf.state.currentPage, canvasRef.value, pdf.state.scale)
+    if (canvasRef.value) {
+      emit('loaded', {
+        width: canvasRef.value.width,
+        height: canvasRef.value.height,
+        scale: pdf.state.scale,
+      })
+    }
   }
 })
 

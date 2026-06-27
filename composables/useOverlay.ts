@@ -19,6 +19,16 @@ export const selectedFormattingState = ref<{
   color: string
 } | null>(null)
 
+export const selectedShapeFormattingState = ref<{
+  strokeWidth: number
+  strokeColor: string
+  fillColor: string
+  shapeType: string
+} | null>(null)
+
+// Reactive page background colour (shown in formatting bar when nothing is selected)
+export const currentPageBackgroundState = ref<string>('#ffffff')
+
 export function useOverlay() {
   const state = reactive<OverlayState>({
     objects: [],
@@ -32,7 +42,11 @@ export function useOverlay() {
   let layer: Konva.Layer | null = null
   let transformer: Konva.Transformer | null = null
   let keyboardHandler: ((e: KeyboardEvent) => void) | null = null
+  let outsideClickHandler: ((e: MouseEvent) => void) | null = null
   let activeTextarea: HTMLTextAreaElement | null = null
+  let selectModeActive = false
+  // Suppress saveOverlays() calls while loadOverlaysForPage is reconstructing the canvas
+  let _loadingOverlays = false
 
   // Refs for external access
   const stageRef = ref<Konva.Stage | null>(null)
@@ -41,7 +55,10 @@ export function useOverlay() {
   const selectedFormatting = selectedFormattingState
 
   function syncFormattingState(node: Konva.Text | null) {
-    if (!node) { selectedFormatting.value = null; return }
+    if (!node) {
+      selectedFormatting.value = null
+      return
+    }
     const fontStyle = node.fontStyle() || ''
     const textDecoration = node.textDecoration() || ''
     const fill = node.fill()
@@ -54,6 +71,27 @@ export function useOverlay() {
       align: node.align() || 'left',
       fontSize: node.fontSize(),
       color: typeof fill === 'string' ? fill : '#000000',
+    }
+  }
+
+  function syncShapeFormattingState(node: Konva.Shape | null) {
+    if (!node) {
+      selectedShapeFormattingState.value = null
+      return
+    }
+    const fill = node.fill()
+    const fillColor = (!fill || fill === 'transparent' || fill === 'none' || fill === '')
+      ? 'transparent'
+      : (typeof fill === 'string' ? fill : '#000000')
+    let shapeType = 'shape'
+    if (node instanceof Konva.Rect) shapeType = 'rectangle'
+    else if (node instanceof Konva.Ellipse) shapeType = 'circle'
+    else if (node instanceof Konva.Line) shapeType = (node as Konva.Line).closed() ? 'triangle' : 'line'
+    selectedShapeFormattingState.value = {
+      strokeWidth: node.strokeWidth(),
+      strokeColor: (node.stroke() as string) || '#000000',
+      fillColor,
+      shapeType,
     }
   }
 
@@ -83,9 +121,9 @@ export function useOverlay() {
       nodes: [],
       rotateEnabled: true,
       resizeEnabled: true,
-      borderStroke: '#3b82f6',
+      borderStroke: '#a855f7',
       borderStrokeWidth: 2,
-      anchorFill: '#3b82f6',
+      anchorFill: '#a855f7',
       anchorStroke: '#ffffff',
       anchorSize: 12,
       anchorCornerRadius: 6,
@@ -94,11 +132,16 @@ export function useOverlay() {
     })
     layer.add(transformer)
 
-    // Click on empty area to deselect and clear toolbar
+    // Click on empty area or any object — deselect on background, always clear select highlights
     stage.on('click tap', (e) => {
+      // Clear select-mode highlights on any click
+      if (selectModeActive) {
+        clearSelectHighlights()
+      }
       if (e.target === stage) {
         transformer?.nodes([])
         syncFormattingState(null)
+        selectedShapeFormattingState.value = null
       }
     })
 
@@ -107,29 +150,57 @@ export function useOverlay() {
     // Save overlays when object is modified
     stage.on('dragend transformend', saveOverlays)
 
-    // Handle text node transforms - prevent scaling, adjust container dimensions instead
-    transformer.on('transformend', (e) => {
+    // Handle node transforms — bake scale back into dimensions and fix stroke width
+    transformer.on('transformend', () => {
       const node = transformer?.nodes()[0]
       if (node && node instanceof Konva.Text) {
         // Get the scaled dimensions
         const scaleX = node.scaleX()
         const scaleY = node.scaleY()
-        
+
         // Update the actual dimensions based on scale
         node.width(node.width() * scaleX)
-        
+
         // Get current height (auto-calculated from content)
         const currentHeight = node.height()
         const newHeight = currentHeight * scaleY
-        
+
         // Set explicit height (will clip if content exceeds)
         node.height(newHeight)
-        
+
         // Reset scale to 1
         node.scaleX(1)
         node.scaleY(1)
-        
+
         layer?.draw()
+      }
+      else if (node instanceof Konva.Rect) {
+        // Bake scale into width/height so the shape stays pixel-perfect
+        node.width(node.width() * node.scaleX())
+        node.height(node.height() * node.scaleY())
+        node.scaleX(1)
+        node.scaleY(1)
+        layer?.draw()
+        syncShapeFormattingState(node)
+      }
+      else if (node instanceof Konva.Ellipse) {
+        // Bake scale into radii — preserves any ellipse aspect ratio
+        node.radiusX(node.radiusX() * node.scaleX())
+        node.radiusY(node.radiusY() * node.scaleY())
+        node.scaleX(1)
+        node.scaleY(1)
+        layer?.draw()
+        syncShapeFormattingState(node)
+      }
+      else if (node instanceof Konva.Line) {
+        // Bake scale into each point coordinate
+        const scaleX = node.scaleX()
+        const scaleY = node.scaleY()
+        node.points(node.points().map((p: number, i: number) => i % 2 === 0 ? p * scaleX : p * scaleY))
+        node.scaleX(1)
+        node.scaleY(1)
+        layer?.draw()
+        syncShapeFormattingState(node)
       }
     })
 
@@ -155,13 +226,26 @@ export function useOverlay() {
     // Add keyboard listener
     window.addEventListener('keydown', keyboardHandler)
 
+    // Deselect when clicking anywhere outside the canvas container
+    outsideClickHandler = (e: MouseEvent) => {
+      const canvasEl = stage?.container()
+      if (canvasEl && !canvasEl.contains(e.target as Node)) {
+        transformer?.nodes([])
+        syncFormattingState(null)
+        selectedShapeFormattingState.value = null
+        if (selectModeActive) clearSelectHighlights()
+        layer?.draw()
+      }
+    }
+    document.addEventListener('mousedown', outsideClickHandler)
+
     return stage
   }
 
   /**
    * Add text overlay
    */
-  function addText(text: string = 'New Text', options?: any) {
+  function addText(text: string = 'New Text', options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
 
@@ -179,11 +263,12 @@ export function useOverlay() {
       ...options,
     })
 
-    // Select on click — also syncs toolbar state reactively
+    // Select on click — sync text formatting, clear shape formatting
     textNode.on('click tap', () => {
       transformer!.nodes([textNode])
       layer!.draw()
       syncFormattingState(textNode)
+      selectedShapeFormattingState.value = null
     })
 
     // WYSIWYG inline editing on double-click
@@ -219,14 +304,14 @@ export function useOverlay() {
 
       // Semi-transparent background + visible border to show the editing boundary
       textarea.style.background = 'rgba(255, 255, 255, 0.85)'
-      textarea.style.border = '1px solid rgba(59, 130, 246, 0.8)'
+      textarea.style.border = '1px solid rgba(168, 85, 247, 0.8)'
       textarea.style.outline = 'none'
       textarea.style.padding = '2px'
       textarea.style.margin = '0'
       textarea.style.overflow = 'hidden'
       textarea.style.resize = 'none'
       textarea.style.boxSizing = 'border-box'
-      textarea.style.wordBreak = 'break-all'  // force wrapping of long words/URLs
+      textarea.style.wordBreak = 'break-all' // force wrapping of long words/URLs
 
       // Hide Konva text node while textarea is visible
       textNode.hide()
@@ -250,16 +335,22 @@ export function useOverlay() {
         activeTextarea = null
         textNode.text(textarea.value || ' ')
         textNode.show()
-        layer?.draw()  // guard: layer may be null if component unmounted
+        layer?.draw() // guard: layer may be null if component unmounted
         textarea.parentNode?.removeChild(textarea)
         syncFormattingState(textNode)
         saveOverlays()
       }
 
       textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Escape') { e.preventDefault(); removeTextarea() }
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          removeTextarea()
+        }
         // Enter without shift commits; shift+Enter inserts newline
-        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); removeTextarea() }
+        if (e.key === 'Enter' && !e.shiftKey) {
+          e.preventDefault()
+          removeTextarea()
+        }
       })
 
       // Delay blur-close by 200ms so toolbar clicks register first
@@ -268,7 +359,7 @@ export function useOverlay() {
 
     layer.add(textNode)
     transformer.nodes([textNode])
-    syncFormattingState(textNode)  // activate toolbar immediately on add
+    syncFormattingState(textNode) // activate toolbar immediately on add
     layer.draw()
     saveOverlays()
   }
@@ -276,9 +367,13 @@ export function useOverlay() {
   /**
    * Add image overlay
    */
-  async function addImage(imageUrl: string, options?: any) {
+  async function addImage(imageUrl: string, options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
+
+    // Capture the page at call time so stale loads can be discarded if the
+    // user switches pages before the image finishes loading.
+    const pageAtCallTime = state.currentPage
 
     return new Promise<void>((resolve, reject) => {
       const imageObj = new Image()
@@ -288,6 +383,12 @@ export function useOverlay() {
       }
 
       imageObj.onload = () => {
+        // Discard if the user has navigated away from this page
+        if (state.currentPage !== pageAtCallTime || !layer) {
+          resolve()
+          return
+        }
+
         const image = new Konva.Image({
           x: 100,
           y: 100,
@@ -324,7 +425,7 @@ export function useOverlay() {
   /**
    * Add rectangle shape
    */
-  function addRectangle(options?: any) {
+  function addRectangle(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
 
@@ -336,14 +437,17 @@ export function useOverlay() {
       fill: 'transparent',
       stroke: '#000000',
       strokeWidth: 2,
+      strokeScaleEnabled: false,
       draggable: true,
       name: 'overlay-object',
       ...options,
     })
 
-    // Select on click
+    // Select on click — sync shape formatting, clear text formatting
     rect.on('click tap', () => {
       transformer!.nodes([rect])
+      syncShapeFormattingState(rect)
+      syncFormattingState(null)
     })
 
     layer.add(rect)
@@ -353,27 +457,35 @@ export function useOverlay() {
   }
 
   /**
-   * Add circle shape
+   * Add circle/ellipse shape
    */
-  function addCircle(options?: any) {
+  function addCircle(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
 
-    const circle = new Konva.Circle({
+    // Support legacy `radius` option from older saved data
+    const { radius, ...rest } = (options || {}) as Record<string, unknown> & { radius?: number }
+    const defaultRadius = radius || 50
+
+    const circle = new Konva.Ellipse({
       x: 150,
       y: 150,
-      radius: 50,
+      radiusX: defaultRadius,
+      radiusY: defaultRadius,
       fill: 'transparent',
       stroke: '#000000',
       strokeWidth: 2,
+      strokeScaleEnabled: false,
       draggable: true,
       name: 'overlay-object',
-      ...options,
+      ...rest,
     })
 
-    // Select on click
+    // Select on click — sync shape formatting, clear text formatting
     circle.on('click tap', () => {
       transformer!.nodes([circle])
+      syncShapeFormattingState(circle)
+      syncFormattingState(null)
     })
 
     layer.add(circle)
@@ -383,9 +495,74 @@ export function useOverlay() {
   }
 
   /**
+   * Add line shape
+   */
+  function addLine(options?: Record<string, unknown>) {
+    if (!layer || !transformer)
+      return
+
+    const line = new Konva.Line({
+      x: 100,
+      y: 200,
+      points: [0, 0, 200, 0],
+      stroke: '#000000',
+      strokeWidth: 2,
+      strokeScaleEnabled: false,
+      hitStrokeWidth: 12,
+      draggable: true,
+      name: 'overlay-object',
+      ...options,
+    })
+
+    line.on('click tap', () => {
+      transformer!.nodes([line])
+      syncShapeFormattingState(line)
+      syncFormattingState(null)
+    })
+
+    layer.add(line)
+    transformer.nodes([line])
+    layer.draw()
+    saveOverlays()
+  }
+
+  /**
+   * Add triangle shape
+   */
+  function addTriangle(options?: Record<string, unknown>) {
+    if (!layer || !transformer)
+      return
+
+    const triangle = new Konva.Line({
+      x: 100,
+      y: 100,
+      points: [50, 0, 100, 86, 0, 86],
+      closed: true,
+      fill: 'transparent',
+      stroke: '#000000',
+      strokeWidth: 2,
+      strokeScaleEnabled: false,
+      draggable: true,
+      name: 'overlay-object',
+      ...options,
+    })
+
+    triangle.on('click tap', () => {
+      transformer!.nodes([triangle])
+      syncShapeFormattingState(triangle)
+      syncFormattingState(null)
+    })
+
+    layer.add(triangle)
+    transformer.nodes([triangle])
+    layer.draw()
+    saveOverlays()
+  }
+
+  /**
    * Add highlight overlay
    */
-  function addHighlight(options?: any) {
+  function addHighlight(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
 
@@ -547,6 +724,105 @@ export function useOverlay() {
   }
 
   /**
+   * Show a blue glow on every overlay object so users know what is selectable.
+   * Clears automatically on the next canvas click (via stage event handler).
+   */
+  function setSelectMode(active: boolean) {
+    if (!layer) return
+    selectModeActive = active
+    ;(layer.find('.overlay-object') as Konva.Shape[]).forEach((obj) => {
+      if (active) {
+        obj.shadowColor('#7e22ce')
+        obj.shadowBlur(5)
+        obj.shadowOpacity(1)
+        obj.shadowOffset({ x: 0, y: 0 })
+        obj.shadowEnabled(true)
+      }
+      else {
+        obj.shadowEnabled(false)
+      }
+    })
+    layer.draw()
+  }
+
+  function clearSelectHighlights() {
+    selectModeActive = false
+    if (!layer) return
+    ;(layer.find('.overlay-object') as Konva.Shape[]).forEach(obj => obj.shadowEnabled(false))
+    layer.draw()
+  }
+
+  /**
+   * Update stroke/fill properties on the currently selected shape
+   */
+  function updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }) {
+    if (!transformer) return
+    const nodes = transformer.nodes()
+    if (nodes.length === 0) return
+    const node = nodes[0] as Konva.Shape
+    if (!(node instanceof Konva.Rect) && !(node instanceof Konva.Ellipse) && !(node instanceof Konva.Line)) return
+
+    if (props.strokeWidth !== undefined) node.strokeWidth(props.strokeWidth)
+    if (props.strokeColor !== undefined) node.stroke(props.strokeColor)
+    if (props.fillColor !== undefined) {
+      node.fill(props.fillColor === 'transparent' ? '' : props.fillColor)
+    }
+
+    layer?.draw()
+    syncShapeFormattingState(node)
+    saveOverlays()
+  }
+
+  /**
+   * Set the background colour of the current page.
+   * Stores it as a special 'background' overlay so it is exported and applied in the PDF.
+   */
+  function setPageBackground(color: string) {
+    currentPageBackgroundState.value = color
+
+    // Apply visually to the Konva container
+    if (stage) {
+      const baseW = stage.width() / (stage.scaleX() || 1)
+      const baseH = stage.height() / (stage.scaleY() || 1)
+      _applyBackgroundRect(color, baseW, baseH)
+    }
+
+    // Persist as a background overlay object for this page
+    state.objects = [
+      ...state.objects.filter(o => !(o.page === state.currentPage && o.type === 'background')),
+      {
+        id: `bg-${state.currentPage}`,
+        page: state.currentPage,
+        type: 'background' as OverlayObject['type'],
+        x: 0,
+        y: 0,
+        data: { color },
+      },
+    ]
+  }
+
+  function _applyBackgroundRect(color: string, baseW: number, baseH: number) {
+    if (!layer) return
+    // Remove existing background rect
+    layer.find('.page-background').forEach(n => n.destroy())
+    if (color && color !== 'transparent') {
+      const bgRect = new Konva.Rect({
+        x: 0,
+        y: 0,
+        width: baseW,
+        height: baseH,
+        fill: color,
+        listening: false,
+        name: 'page-background',
+      })
+      layer.add(bgRect)
+      bgRect.moveToBottom()
+      transformer?.moveToTop()
+    }
+    layer.draw()
+  }
+
+  /**
    * Delete selected object
    */
   function deleteSelected() {
@@ -570,25 +846,31 @@ export function useOverlay() {
     if (!layer)
       return
 
-    // Remove all objects except transformer
+    // Remove all Konva nodes from the canvas (visual only — state.objects is managed by saveOverlays)
     const objects = layer.find('.overlay-object')
     objects.forEach(obj => obj.destroy())
     transformer?.nodes([])
     layer.draw()
-    state.objects = []
     console.log('🧹 Canvas cleared')
   }
 
   /**
-   * Save current canvas state to overlay objects
+   * Save current canvas state — merges objects for the current page into the
+   * global objects array, leaving other pages' objects untouched.
+   * Background overlays are always preserved since they live outside the canvas scan.
    */
   function saveOverlays() {
-    if (!layer)
+    if (!layer || _loadingOverlays)
       return
 
     const objects = layer.find('.overlay-object')
-    state.objects = objects.map((obj, index) => convertKonvaToOverlay(obj, index))
-    console.log('💾 Overlays saved:', state.objects.length, 'objects')
+    const currentPageObjects = objects.map((obj, index) => convertKonvaToOverlay(obj, index))
+
+    // Keep other pages' objects + this page's background overlays, then add scanned canvas objects
+    const otherPageObjects = state.objects.filter(o => o.page !== state.currentPage)
+    const currentPageBackgrounds = state.objects.filter(o => o.page === state.currentPage && o.type === 'background')
+    state.objects = [...otherPageObjects, ...currentPageBackgrounds, ...currentPageObjects]
+    console.log('💾 Overlays saved:', state.objects.length, 'objects total,', currentPageObjects.length, 'on page', state.currentPage)
   }
 
   /**
@@ -645,14 +927,24 @@ export function useOverlay() {
         }
       }
     }
-    else if (node instanceof Konva.Circle) {
+    else if (node instanceof Konva.Ellipse) {
       baseOverlay.type = 'shape'
       baseOverlay.data = {
         shapeType: 'circle',
         fill: node.fill(),
         stroke: node.stroke(),
         strokeWidth: node.strokeWidth(),
-        radius: (node as Konva.Circle).radius() * node.scaleX(),
+      }
+    }
+    else if (node instanceof Konva.Line) {
+      const isClosed = (node as Konva.Line).closed()
+      baseOverlay.type = 'shape'
+      baseOverlay.data = {
+        shapeType: isClosed ? 'triangle' : 'line',
+        points: [...(node as Konva.Line).points()],
+        fill: isClosed ? ((node as Konva.Line).fill() as string) : undefined,
+        stroke: node.stroke() as string,
+        strokeWidth: node.strokeWidth(),
       }
     }
 
@@ -662,7 +954,7 @@ export function useOverlay() {
   /**
    * Load overlays for current page
    */
-  function loadOverlaysForPage(pageNumber: number, overlays: OverlayObject[]) {
+  async function loadOverlaysForPage(pageNumber: number, overlays: OverlayObject[]) {
     if (!layer)
       return
 
@@ -670,9 +962,23 @@ export function useOverlay() {
     state.currentPage = pageNumber
 
     const pageOverlays = overlays.filter(o => o.page === pageNumber)
-    
-    // Convert overlay objects back to Konva nodes
-    pageOverlays.forEach((overlay) => {
+
+    // Apply stored page background (or reset to transparent)
+    const bgOverlay = pageOverlays.find(o => o.type === 'background')
+    const bgColor = (bgOverlay?.data?.color as string) || 'transparent'
+    currentPageBackgroundState.value = bgColor === 'transparent' ? '#ffffff' : bgColor
+    if (stage) {
+      const baseW = stage.width() / (stage.scaleX() || 1)
+      const baseH = stage.height() / (stage.scaleY() || 1)
+      _applyBackgroundRect(bgColor, baseW, baseH)
+    }
+
+    // Suppress intermediate saveOverlays() calls from individual add* functions
+    // so a late-resolving image doesn't clobber already-saved text/shapes.
+    _loadingOverlays = true
+
+    // Use for...of so we can properly await async addImage calls
+    for (const overlay of pageOverlays) {
       if (overlay.type === 'text' && overlay.data.text) {
         addText(overlay.data.text, {
           x: overlay.x,
@@ -687,7 +993,8 @@ export function useOverlay() {
         })
       }
       else if (overlay.type === 'image' && overlay.data.src) {
-        addImage(overlay.data.src, {
+        // Await so the canvas has the image node before saveOverlays() fires
+        await addImage(overlay.data.src, {
           x: overlay.x,
           y: overlay.y,
           rotation: overlay.rotation,
@@ -708,9 +1015,31 @@ export function useOverlay() {
       }
       else if (overlay.type === 'shape' && overlay.data.shapeType === 'circle') {
         addCircle({
-          x: overlay.x + (overlay.width || 0) / 2,
-          y: overlay.y + (overlay.height || 0) / 2,
-          radius: overlay.data.radius,
+          x: overlay.x,
+          y: overlay.y,
+          radiusX: (overlay.width || 100) / 2,
+          radiusY: (overlay.height || 100) / 2,
+          fill: overlay.data.fill,
+          stroke: overlay.data.stroke,
+          strokeWidth: overlay.data.strokeWidth,
+          rotation: overlay.rotation,
+        })
+      }
+      else if (overlay.type === 'shape' && overlay.data.shapeType === 'line') {
+        addLine({
+          x: overlay.x,
+          y: overlay.y,
+          points: overlay.data.points || [0, 0, 200, 0],
+          stroke: overlay.data.stroke,
+          strokeWidth: overlay.data.strokeWidth,
+          rotation: overlay.rotation,
+        })
+      }
+      else if (overlay.type === 'shape' && overlay.data.shapeType === 'triangle') {
+        addTriangle({
+          x: overlay.x,
+          y: overlay.y,
+          points: overlay.data.points || [50, 0, 100, 86, 0, 86],
           fill: overlay.data.fill,
           stroke: overlay.data.stroke,
           strokeWidth: overlay.data.strokeWidth,
@@ -727,9 +1056,54 @@ export function useOverlay() {
           rotation: overlay.rotation,
         })
       }
-    })
+      else if (overlay.type === 'background') {
+        // Already applied as a Konva rect above; nothing more to do here
+      }
+    }
+
+    // Re-enable saving and do a single authoritative save now that every
+    // element (including async images) is on the canvas.
+    _loadingOverlays = false
+    saveOverlays()
 
     console.log('📂 Loaded', pageOverlays.length, 'overlays for page', pageNumber)
+  }
+
+  /**
+   * Switch to a different page: save the current page then load the target page.
+   * pageNumber is 0-indexed (PDF page 1 = overlay page 0).
+   */
+  async function switchPage(pageNumber: number) {
+    saveOverlays()
+    await loadOverlaysForPage(pageNumber, state.objects)
+  }
+
+  /**
+   * Remove all overlays for a given page and re-index pages that came after it.
+   * Call this BEFORE reloading the PDF after a page deletion.
+   * pageIndex is 0-indexed.
+   */
+  function deletePageOverlays(pageIndex: number) {
+    saveOverlays()
+
+    // Remove this page's overlays and re-index subsequent pages
+    state.objects = state.objects
+      .filter(o => o.page !== pageIndex)
+      .map(o => o.page > pageIndex ? { ...o, page: o.page - 1 } : o)
+
+    // Clear the Konva canvas so the deleted elements are not visible.
+    if (layer) {
+      layer.find('.overlay-object').forEach(obj => obj.destroy())
+      transformer?.nodes([])
+      selectedShapeFormattingState.value = null
+      syncFormattingState(null)
+      layer.draw()
+    }
+
+    // Reset to a sentinel so the next saveOverlays() call (triggered by the
+    // page-change watcher after pdf.loadPDF) does not match any real page and
+    // cannot overwrite the freshly re-indexed state.objects data.
+    state.currentPage = -1
   }
 
   /**
@@ -748,6 +1122,12 @@ export function useOverlay() {
     if (keyboardHandler) {
       window.removeEventListener('keydown', keyboardHandler)
       keyboardHandler = null
+    }
+
+    // Remove outside-click listener
+    if (outsideClickHandler) {
+      document.removeEventListener('mousedown', outsideClickHandler)
+      outsideClickHandler = null
     }
 
     // Remove active textarea if any
@@ -787,6 +1167,13 @@ export function useOverlay() {
     toggleTextDecoration,
     updateTextFormatting,
     updateTextColor,
+    updateShapeFormatting,
+    addLine,
+    addTriangle,
+    setSelectMode,
+    setPageBackground,
+    switchPage,
+    deletePageOverlays,
     dispose,
   }
 }
