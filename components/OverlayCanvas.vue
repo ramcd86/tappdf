@@ -25,6 +25,11 @@ onMounted(() => {
   if (containerRef.value && props.width && props.height && !isInitialized.value) {
     overlay.initCanvas(containerRef.value as HTMLDivElement, props.width, props.height)
     isInitialized.value = true
+    // The watch below only fires on *changes* — apply the current scale immediately
+    // so the coordinate system is correct even if scale is already != 1 at mount time.
+    if (overlay.stage.value) {
+      overlay.stage.value.scale({ x: props.scale || 1, y: props.scale || 1 })
+    }
   }
 })
 

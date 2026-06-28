@@ -228,6 +228,8 @@ export function useOverlay() {
 
     // Deselect when clicking anywhere outside the canvas container
     outsideClickHandler = (e: MouseEvent) => {
+      // Don't deselect when clicking on formatting controls (header toolbar)
+      if ((e.target as HTMLElement).closest('[data-preserve-canvas-selection]')) return
       const canvasEl = stage?.container()
       if (canvasEl && !canvasEl.contains(e.target as Node)) {
         transformer?.nodes([])
@@ -240,6 +242,15 @@ export function useOverlay() {
     document.addEventListener('mousedown', outsideClickHandler)
 
     return stage
+  }
+
+  /**
+   * Select a node: attach it to the transformer and move the transformer to the
+   * top of the layer so its handles are always rendered above every other element.
+   */
+  function selectNode(node: Konva.Node): void {
+    transformer!.nodes([node])
+    transformer!.moveToTop()
   }
 
   /**
@@ -265,7 +276,7 @@ export function useOverlay() {
 
     // Select on click — sync text formatting, clear shape formatting
     textNode.on('click tap', () => {
-      transformer!.nodes([textNode])
+      selectNode(textNode)
       layer!.draw()
       syncFormattingState(textNode)
       selectedShapeFormattingState.value = null
@@ -358,7 +369,7 @@ export function useOverlay() {
     })
 
     layer.add(textNode)
-    transformer.nodes([textNode])
+    selectNode(textNode)
     syncFormattingState(textNode) // activate toolbar immediately on add
     layer.draw()
     saveOverlays()
@@ -406,11 +417,11 @@ export function useOverlay() {
         }
 
         image.on('click tap', () => {
-          transformer!.nodes([image])
+          selectNode(image)
         })
 
         layer!.add(image)
-        transformer!.nodes([image])
+        selectNode(image)
         layer!.draw()
         saveOverlays()
         resolve()
@@ -445,13 +456,13 @@ export function useOverlay() {
 
     // Select on click — sync shape formatting, clear text formatting
     rect.on('click tap', () => {
-      transformer!.nodes([rect])
+      selectNode(rect)
       syncShapeFormattingState(rect)
       syncFormattingState(null)
     })
 
     layer.add(rect)
-    transformer.nodes([rect])
+    selectNode(rect)
     layer.draw()
     saveOverlays()
   }
@@ -483,13 +494,13 @@ export function useOverlay() {
 
     // Select on click — sync shape formatting, clear text formatting
     circle.on('click tap', () => {
-      transformer!.nodes([circle])
+      selectNode(circle)
       syncShapeFormattingState(circle)
       syncFormattingState(null)
     })
 
     layer.add(circle)
-    transformer.nodes([circle])
+    selectNode(circle)
     layer.draw()
     saveOverlays()
   }
@@ -515,13 +526,13 @@ export function useOverlay() {
     })
 
     line.on('click tap', () => {
-      transformer!.nodes([line])
+      selectNode(line)
       syncShapeFormattingState(line)
       syncFormattingState(null)
     })
 
     layer.add(line)
-    transformer.nodes([line])
+    selectNode(line)
     layer.draw()
     saveOverlays()
   }
@@ -548,13 +559,13 @@ export function useOverlay() {
     })
 
     triangle.on('click tap', () => {
-      transformer!.nodes([triangle])
+      selectNode(triangle)
       syncShapeFormattingState(triangle)
       syncFormattingState(null)
     })
 
     layer.add(triangle)
-    transformer.nodes([triangle])
+    selectNode(triangle)
     layer.draw()
     saveOverlays()
   }
@@ -579,11 +590,11 @@ export function useOverlay() {
 
     // Select on click
     highlight.on('click tap', () => {
-      transformer!.nodes([highlight])
+      selectNode(highlight)
     })
 
     layer.add(highlight)
-    transformer.nodes([highlight])
+    selectNode(highlight)
     layer.draw()
     saveOverlays()
   }

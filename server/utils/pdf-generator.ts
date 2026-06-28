@@ -130,7 +130,7 @@ async function applyTextOverlay(
   pageHeight: number
 ): Promise<void> {
   const { x, y, rotation = 0, data } = overlay
-  const { text, fontSize, color, fontStyle = '', textDecoration = '' } = data
+  const { text, fontSize, color, fontStyle = '', textDecoration = '', align = 'left' } = data
 
   // Choose font based on style
   let fontName = StandardFonts.Helvetica
@@ -149,51 +149,75 @@ async function applyTextOverlay(
   const textWidth = overlay.width || 200
   const lineThickness = Math.max(0.5, size / 18)
 
-  // PDF Y origin is bottom-left; Konva Y origin is top-left.
-  const pdfY = pageHeight - y - size
-
-  page.drawText(text || '', {
-    x,
-    y: pdfY,
-    size,
-    font,
-    color: textColor,
-    rotate: degrees(-rotation),
-    maxWidth: textWidth,
-    lineHeight,
-  })
-
-  // Underline and strikethrough must be drawn manually — pdf-lib has no textDecoration.
   const needsUnderline = textDecoration.includes('underline')
   const needsStrikethrough = textDecoration.includes('line-through')
 
-  if (needsUnderline || needsStrikethrough) {
-    const lines = getWrappedLines(text || '', font, size, textWidth)
-    lines.forEach((line, i) => {
-      const lineWidth = font.widthOfTextAtSize(line, size)
-      const baselineY = pdfY - i * lineHeight
+  // Convert a point from Konva's local text-box space to PDF page coordinates.
+  //
+  // Konva rotates around the node origin (top-left of text box) using CW-positive
+  // rotation in a y-down coordinate system.  PDF has y-up, so y is flipped.
+  //
+  // localX = horizontal distance from the left edge of the text box (text direction)
+  // localY = vertical distance from the TOP of the text box (downward, y-down)
+  //
+  // Konva CW rotation matrix (y-down): [[cosθ, -sinθ], [sinθ, cosθ]]
+  // After flipping y for PDF:  pdf_y = pageHeight - konva_y
+  const θ = rotation * Math.PI / 180
+  const cosθ = Math.cos(θ)
+  const sinθ = Math.sin(θ)
 
-      if (needsUnderline) {
-        page.drawLine({
-          start: { x, y: baselineY - lineThickness },
-          end: { x: x + lineWidth, y: baselineY - lineThickness },
-          thickness: lineThickness,
-          color: textColor,
-        })
-      }
-
-      if (needsStrikethrough) {
-        // Strike at ~40% of cap height above baseline
-        const strikeY = baselineY + size * 0.28
-        page.drawLine({
-          start: { x, y: strikeY },
-          end: { x: x + lineWidth, y: strikeY },
-          thickness: lineThickness,
-          color: textColor,
-        })
-      }
-    })
+  function toPDF(localX: number, localY: number): { x: number; y: number } {
+    return {
+      x: x + localX * cosθ - localY * sinθ,
+      y: pageHeight - y - localX * sinθ - localY * cosθ,
+    }
   }
+
+  // Konva's alphabetic baseline is at 0.85 × fontSize below the text-box top
+  // (derived from Konva's fontBoundingBoxAscent/Descent metrics: (0.91f−0.21f)/2 + 0.5f).
+  // Each subsequent line is offset by lineHeight in the local (rotated) frame.
+  const lines = getWrappedLines(text || '', font, size, textWidth)
+
+  lines.forEach((line, i) => {
+    const lineWidth = font.widthOfTextAtSize(line, size)
+
+    // Horizontal offset from text-box left edge (alignment)
+    let hOff = 0
+    if (align === 'center') hOff = (textWidth - lineWidth) / 2
+    else if (align === 'right') hOff = textWidth - lineWidth
+
+    // Vertical offset: baseline of line i from the text-box top
+    const vOff = size * 0.85 + i * lineHeight
+
+    const pos = toPDF(hOff, vOff)
+    page.drawText(line, {
+      x: pos.x,
+      y: pos.y,
+      size,
+      font,
+      color: textColor,
+      rotate: degrees(-rotation),
+    })
+
+    if (needsUnderline) {
+      page.drawLine({
+        start: toPDF(hOff, vOff + lineThickness),
+        end: toPDF(hOff + lineWidth, vOff + lineThickness),
+        thickness: lineThickness,
+        color: textColor,
+      })
+    }
+
+    if (needsStrikethrough) {
+      const strikeLY = vOff - size * 0.28
+      page.drawLine({
+        start: toPDF(hOff, strikeLY),
+        end: toPDF(hOff + lineWidth, strikeLY),
+        thickness: lineThickness,
+        color: textColor,
+      })
+    }
+  })
 }
 
 /**

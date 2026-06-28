@@ -1,0 +1,292 @@
+<template>
+  <header
+    class="bg-gray-900 sticky top-0 z-50"
+    data-preserve-canvas-selection
+  >
+    <div class="max-w-full px-4 py-3 flex items-center justify-between">
+      <NuxtLink
+        to="/"
+        class="logo-text"
+      >
+        tapPDF
+      </NuxtLink>
+
+      <div class="flex items-center gap-4">
+        <PageNavigator />
+        <button
+          class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-300"
+          :disabled="isAddingPage || !documentId"
+          @click="emit('add-page')"
+        >
+          <span v-if="isAddingPage">Adding...</span>
+          <span v-else>+ Add Page</span>
+        </button>
+        <button
+          class="px-3 py-1 text-sm rounded text-pink-400 hover:bg-pink-900/20 disabled:opacity-50"
+          :disabled="isDeletingPage || pdf.state.totalPages <= 1 || pdf.state.currentPage === 1 || !documentId"
+          @click="emit('delete-page')"
+        >
+          <span v-if="isDeletingPage">Deleting...</span>
+          <span v-else>Delete Page</span>
+        </button>
+        <button
+          class="btn-primary"
+          :disabled="!documentId || isDownloading"
+          @click="emit('download')"
+        >
+          <span v-if="isDownloading">Saving...</span>
+          <span v-else>Save &amp; Download</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Formatting Bar -->
+    <div class="bg-gray-800 px-4 py-2 flex items-center gap-4 h-[50px]">
+      <template v-if="textFormatting">
+        <span class="text-xs font-medium text-gray-400 uppercase">Text Format:</span>
+
+        <!-- Style Buttons -->
+        <div class="flex gap-1">
+          <button
+            title="Bold"
+            class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isBold }"
+            @click="emit('toggle-text-style', 'bold')"
+          >
+            <span class="font-bold">B</span>
+          </button>
+          <button
+            title="Italic"
+            class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isItalic }"
+            @click="emit('toggle-text-style', 'italic')"
+          >
+            <span class="italic">I</span>
+          </button>
+          <button
+            title="Underline"
+            class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isUnderline }"
+            @click="emit('toggle-text-decoration', 'underline')"
+          >
+            <span class="underline">U</span>
+          </button>
+          <button
+            title="Strikethrough"
+            class="px-3 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500 text-primary-300': textFormatting.isStrikethrough }"
+            @click="emit('toggle-text-decoration', 'line-through')"
+          >
+            <span class="line-through">S</span>
+          </button>
+        </div>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <!-- Alignment Buttons -->
+        <div class="flex gap-1">
+          <button
+            title="Align Left"
+            class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'left' }"
+            @click="emit('update-text-formatting', { align: 'left' })"
+          >
+            ⬅️
+          </button>
+          <button
+            title="Align Center"
+            class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'center' }"
+            @click="emit('update-text-formatting', { align: 'center' })"
+          >
+            ↔️
+          </button>
+          <button
+            title="Align Right"
+            class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            :class="{ 'bg-gray-700 border-primary-500': textFormatting.align === 'right' }"
+            @click="emit('update-text-formatting', { align: 'right' })"
+          >
+            ➡️
+          </button>
+        </div>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <!-- Font Family Selector -->
+        <select
+          :value="textFormatting.fontFamily || 'Arial'"
+          class="px-3 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onFontChange"
+        >
+          <option
+            v-for="font in fontFamilies"
+            :key="font"
+            :value="font"
+          >
+            {{ font }}
+          </option>
+        </select>
+
+        <!-- Font Size -->
+        <select
+          title="Font Size"
+          :value="textFormatting.fontSize || 16"
+          class="px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onFontSizeChange"
+        >
+          <option
+            v-for="size in fontSizes"
+            :key="size"
+            :value="size"
+          >
+            {{ size }}
+          </option>
+        </select>
+
+        <!-- Text Color -->
+        <input
+          title="Text Color"
+          type="color"
+          :value="textFormatting.color || '#000000'"
+          class="w-10 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+          @input="onColorChange"
+        >
+      </template>
+
+      <template v-else-if="shapeFormatting">
+        <span class="text-xs font-medium text-gray-400 uppercase">Shape:</span>
+
+        <!-- Stroke colour -->
+        <label class="text-xs text-gray-400">Stroke</label>
+        <input
+          title="Stroke colour"
+          type="color"
+          :value="shapeFormatting.strokeColor"
+          class="w-8 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+          @input="onShapeStrokeColor"
+        >
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <!-- Stroke width -->
+        <label class="text-xs text-gray-400">Thickness</label>
+        <input
+          :value="shapeFormatting.strokeWidth"
+          type="range"
+          min="1"
+          max="20"
+          step="0.5"
+          class="w-28"
+          @input="onShapeStrokeWidth"
+        >
+        <span class="text-xs text-gray-500 w-5 text-right">{{ shapeFormatting.strokeWidth }}</span>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <!-- Fill (not for lines) -->
+        <template v-if="shapeFormatting.shapeType !== 'line'">
+          <div class="w-px h-6 bg-gray-600" />
+          <label class="text-xs text-gray-400">Fill</label>
+          <input
+            title="Toggle fill"
+            type="checkbox"
+            :checked="shapeFormatting.fillColor !== 'transparent'"
+            @change="onShapeFillToggle"
+          >
+          <input
+            v-if="shapeFormatting.fillColor !== 'transparent'"
+            title="Fill colour"
+            type="color"
+            :value="shapeFormatting.fillColor"
+            class="w-8 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
+            @input="onShapeFillColor"
+          >
+        </template>
+      </template>
+
+      <span
+        v-else
+        class="text-xs text-gray-500 italic flex items-center gap-3"
+      >
+        <span>Page background:</span>
+        <input
+          title="Page background colour"
+          type="color"
+          :value="pageBackground"
+          class="w-8 h-7 border border-gray-600 rounded cursor-pointer bg-gray-700"
+          @input="onPageBackgroundChange"
+        >
+        <button
+          class="px-2 py-0.5 text-xs border border-gray-600 rounded text-gray-400 hover:bg-gray-700"
+          @click="emit('update-page-background', '#ffffff')"
+        >
+          Reset
+        </button>
+      </span>
+    </div>
+  </header>
+</template>
+
+<script setup lang="ts">
+import { selectedFormattingState, selectedShapeFormattingState, currentPageBackgroundState } from '~/composables/useOverlay'
+
+const _props = defineProps<{
+  documentId: string | undefined
+  isAddingPage: boolean
+  isDeletingPage: boolean
+  isDownloading: boolean
+}>()
+
+const emit = defineEmits<{
+  'add-page': []
+  'delete-page': []
+  'download': []
+  'toggle-text-style': [style: 'bold' | 'italic']
+  'toggle-text-decoration': [decoration: 'underline' | 'line-through']
+  'update-text-formatting': [props: Record<string, unknown>]
+  'update-text-color': [color: string]
+  'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }]
+  'update-page-background': [color: string]
+}>()
+
+const pdf = usePDF()
+const textFormatting = selectedFormattingState
+const shapeFormatting = selectedShapeFormattingState
+const pageBackground = currentPageBackgroundState
+
+const fontFamilies = ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS', 'Impact']
+const fontSizes = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
+
+function onFontChange(event: Event) {
+  emit('update-text-formatting', { fontFamily: (event.target as HTMLSelectElement).value })
+}
+
+function onFontSizeChange(event: Event) {
+  emit('update-text-formatting', { fontSize: parseInt((event.target as HTMLSelectElement).value, 10) })
+}
+
+function onColorChange(event: Event) {
+  emit('update-text-color', (event.target as HTMLInputElement).value)
+}
+
+function onShapeStrokeColor(event: Event) {
+  emit('update-shape-formatting', { strokeColor: (event.target as HTMLInputElement).value })
+}
+
+function onShapeStrokeWidth(event: Event) {
+  emit('update-shape-formatting', { strokeWidth: parseFloat((event.target as HTMLInputElement).value) })
+}
+
+function onShapeFillToggle(event: Event) {
+  emit('update-shape-formatting', { fillColor: (event.target as HTMLInputElement).checked ? '#ffffff' : 'transparent' })
+}
+
+function onShapeFillColor(event: Event) {
+  emit('update-shape-formatting', { fillColor: (event.target as HTMLInputElement).value })
+}
+
+function onPageBackgroundChange(event: Event) {
+  emit('update-page-background', (event.target as HTMLInputElement).value)
+}
+</script>
