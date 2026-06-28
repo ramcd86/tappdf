@@ -43,6 +43,11 @@
 </template>
 
 <script setup lang="ts">
+useHead({
+  title: 'Payment Successful',
+  meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+})
+
 const route = useRoute()
 const downloadUrl = ref<string | null>(null)
 const errorMessage = ref<string | null>(null)

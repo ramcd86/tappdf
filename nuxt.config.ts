@@ -13,10 +13,24 @@ export default defineNuxtConfig({
   app: {
     head: {
       title: 'tapPDF - Quick PDF Editing',
+      titleTemplate: '%s | tapPDF',
       meta: [
         { charset: 'utf-8' },
         { name: 'viewport', content: 'width=device-width, initial-scale=1' },
         { name: 'description', content: 'Edit and export PDFs with a simple one-time payment. No account needed.' },
+        { name: 'robots', content: 'index, follow' },
+        { name: 'theme-color', content: '#030712' },
+        { name: 'apple-mobile-web-app-title', content: 'tapPDF' },
+        // OpenGraph defaults (overridden per-page)
+        { property: 'og:site_name', content: 'tapPDF' },
+        { property: 'og:type', content: 'website' },
+        { property: 'og:image', content: 'https://tappdf.vercel.app/og-image.png' },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        { property: 'og:image:alt', content: 'tapPDF — Quick PDF Editing' },
+        // Twitter Card defaults
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:image', content: 'https://tappdf.vercel.app/og-image.png' },
       ],
       link: [
         { rel: 'icon', type: 'image/x-icon', href: '/favicon.ico' },

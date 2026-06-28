@@ -92,6 +92,18 @@
 </template>
 
 <script setup lang="ts">
+useHead({
+  title: 'Free Online PDF Editor — Add Text, Images & Shapes',
+  meta: [
+    { name: 'description', content: 'Edit any PDF online in seconds. Add text, images, shapes and more. Pay just €0.99 to download — no account needed.' },
+    { property: 'og:title', content: 'tapPDF — Free Online PDF Editor' },
+    { property: 'og:description', content: 'Add text, images and shapes to any PDF. Pay once, download instantly. No sign-up required.' },
+    { property: 'og:url', content: 'https://tappdf.vercel.app/' },
+    { name: 'twitter:title', content: 'tapPDF — Free Online PDF Editor' },
+    { name: 'twitter:description', content: 'Add text, images and shapes to any PDF. Pay once, download instantly.' },
+  ],
+  link: [{ rel: 'canonical', href: 'https://tappdf.vercel.app/' }],
+})
 const creating = ref(false)
 
 async function createBlankPDF() {

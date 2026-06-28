@@ -61,6 +61,10 @@
 </template>
 
 <script setup lang="ts">
+useHead({
+  title: 'PDF Editor',
+  meta: [{ name: 'robots', content: 'noindex, nofollow' }],
+})
 const route = useRoute()
 const documentId = route.query.id as string
 

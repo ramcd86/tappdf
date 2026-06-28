@@ -1,0 +1,7 @@
+User-agent: *
+Allow: /
+Disallow: /api/
+Disallow: /editor
+Disallow: /payment-success
+
+Sitemap: https://tappdf.vercel.app/sitemap.xml
