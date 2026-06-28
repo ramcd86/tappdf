@@ -30,7 +30,7 @@
             <span v-else>Creating...</span>
           </button>
 
-          <div class="relative">
+          <div v-if="false" class="relative">
             <div class="absolute inset-0 flex items-center">
               <div class="w-full border-t border-gray-700" />
             </div>
@@ -39,7 +39,7 @@
             </div>
           </div>
 
-          <UploadZone />
+          <UploadZone v-if="false" />
         </div>
 
         <div class="mt-8 pt-8">

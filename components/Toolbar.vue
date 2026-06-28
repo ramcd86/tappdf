@@ -74,7 +74,6 @@ const emit = defineEmits<{
   addText: [options: { fontSize: number, color: string }]
   addImage: [imageUrl: string]
   addShape: [type: 'rectangle' | 'circle' | 'triangle' | 'line']
-  addHighlight: []
   selectMode: [active: boolean]
 }>()
 
@@ -87,7 +86,6 @@ const tools = [
   { id: 'text', label: 'Add Text', icon: '📝' },
   { id: 'image', label: 'Add Image', icon: '🖼️' },
   { id: 'shape', label: 'Add Shape', icon: '⬜' },
-  { id: 'highlight', label: 'Highlight', icon: '🖍️' },
 ]
 
 const textOptions = { fontSize: 14, color: '#000000' }
@@ -101,9 +99,6 @@ function handleToolClick(toolId: string) {
   }
   else if (toolId === 'image') {
     imageInput.value?.click()
-  }
-  else if (toolId === 'highlight') {
-    emit('addHighlight')
   }
 }
 

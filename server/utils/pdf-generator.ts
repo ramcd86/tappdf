@@ -82,9 +82,6 @@ async function applyOverlaysToPage(
         case 'image':
           await applyImageOverlay(pdfDoc, page, overlay as ImageOverlay, pageHeight)
           break
-        case 'highlight':
-          await applyHighlightOverlay(page, overlay, pageHeight)
-          break
         case 'shape':
           await applyShapeOverlay(page, overlay, pageHeight)
           break
@@ -302,31 +299,6 @@ function applyBackgroundOverlay(
 }
 
 /**
- * Apply highlight overlay to page
- */
-async function applyHighlightOverlay(
-  page: PDFPage,
-  overlay: OverlayObject,
-  pageHeight: number
-): Promise<void> {
-  const { x, y, width = 100, height = 20, data } = overlay
-  const color = data.color || '#FFFF00'
-  const opacity = data.opacity || 0.3
-  
-  const rgbColor = hexToRgb(color)
-  const pdfY = pageHeight - y - height
-  
-  page.drawRectangle({
-    x,
-    y: pdfY,
-    width,
-    height,
-    color: rgb(rgbColor.r, rgbColor.g, rgbColor.b),
-    opacity
-  })
-}
-
-/**
  * Apply shape overlay to page
  */
 async function applyShapeOverlay(
@@ -336,6 +308,7 @@ async function applyShapeOverlay(
 ): Promise<void> {
   const { x, y, width = 100, height = 100, rotation = 0, data } = overlay
   const shapeType = data.shapeType || 'rectangle'
+  const shapeOpacity: number = data.opacity ?? 1
 
   // Field names match convertKonvaToOverlay: stroke, fill, strokeWidth
   const strokeHex: string = data.stroke || '#000000'
@@ -361,6 +334,7 @@ async function applyShapeOverlay(
       borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
       borderWidth: strokeWidth,
       color: fillColor,
+      opacity: shapeOpacity,
       rotate: degrees(-rotation),
     })
   }
@@ -375,6 +349,7 @@ async function applyShapeOverlay(
       borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
       borderWidth: strokeWidth,
       color: fillColor,
+      opacity: shapeOpacity,
       rotate: degrees(-rotation),
     })
   }
@@ -401,6 +376,7 @@ async function applyShapeOverlay(
         end: { x: e.wx, y: pageHeight - e.wy },
         thickness: strokeWidth,
         color: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
+        opacity: shapeOpacity,
       })
     }
     else {
@@ -416,6 +392,7 @@ async function applyShapeOverlay(
         color: fillColor,
         borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),
         borderWidth: strokeWidth,
+        opacity: shapeOpacity,
       })
     }
   }

@@ -13,7 +13,10 @@
       @update-text-formatting="handleUpdateTextFormatting"
       @update-text-color="(color: string) => overlayCanvas?.updateTextColor(color)"
       @update-shape-formatting="handleUpdateShapeFormatting"
+      @update-image-formatting="(props: { opacity: number }) => overlayCanvas?.updateImageFormatting(props)"
       @update-page-background="(color: string) => overlayCanvas?.setPageBackground(color)"
+      @bring-forward="() => overlayCanvas?.bringForward()"
+      @send-backward="() => overlayCanvas?.sendBackward()"
     />
 
     <div class="flex-1 flex overflow-hidden">
@@ -23,13 +26,12 @@
           @add-text="handleAddText"
           @add-image="handleAddImage"
           @add-shape="handleAddShape"
-          @add-highlight="handleAddHighlight"
           @select-mode="handleSelectMode"
         />
       </aside>
 
       <!-- Main editor area -->
-      <main class="flex-1 bg-gray-950 overflow-auto">
+      <main class="flex-1 overflow-auto editor-canvas-bg">
         <div class="p-8">
           <div class="flex justify-center">
             <div class="relative inline-block">
@@ -75,16 +77,18 @@ interface OverlayCanvasRef {
   addCircle(options?: Record<string, unknown>): void
   addLine(options?: Record<string, unknown>): void
   addTriangle(options?: Record<string, unknown>): void
-  addHighlight(options?: Record<string, unknown>): void
   deleteSelected(): void
   setSelectMode(active: boolean): void
   setPageBackground(color: string): void
-  updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }): void
+  updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }): void
+  updateImageFormatting(props: { opacity: number }): void
   toggleTextStyle(style: string): void
   toggleTextDecoration(decoration: string): void
   updateTextFormatting(props: Record<string, unknown>): void
   updateTextColor(color: string): void
   getOverlaysJSON(): string
+  bringForward(): void
+  sendBackward(): void
 }
 
 interface PaymentModalRef {
@@ -154,10 +158,6 @@ function handleAddShape(type: 'rectangle' | 'circle' | 'triangle' | 'line') {
   }
 }
 
-function handleAddHighlight() {
-  overlayCanvas.value?.addHighlight()
-}
-
 function handleSelectMode(active: boolean) {
   overlayCanvas.value?.setSelectMode(active)
 }
@@ -210,7 +210,7 @@ async function handleDeletePage() {
   }
 }
 
-function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }) {
+function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }) {
   overlayCanvas.value?.updateShapeFormatting(props)
 }
 
@@ -240,3 +240,10 @@ async function handleDownload() {
   }
 }
 </script>
+
+<style scoped>
+.editor-canvas-bg {
+  background-color: #030712;
+  background-image: url("data:image/svg+xml,%3Csvg width='8' height='8' viewBox='0 0 16 16' xmlns='http://www.w3.org/2000/svg'%3E%3Crect x='0' y='0' width='8' height='8' fill='%23111827'/%3E%3Crect x='8' y='8' width='8' height='8' fill='%23111827'/%3E%3C/svg%3E");
+}
+</style>

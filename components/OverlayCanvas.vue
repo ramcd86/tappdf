@@ -25,21 +25,15 @@ onMounted(() => {
   if (containerRef.value && props.width && props.height && !isInitialized.value) {
     overlay.initCanvas(containerRef.value as HTMLDivElement, props.width, props.height)
     isInitialized.value = true
-    // The watch below only fires on *changes* — apply the current scale immediately
-    // so the coordinate system is correct even if scale is already != 1 at mount time.
-    if (overlay.stage.value) {
-      overlay.stage.value.scale({ x: props.scale || 1, y: props.scale || 1 })
-    }
+    // Apply scale/size immediately via the raw-stage helper (bypasses Vue's reactive proxy)
+    overlay.setSize(props.width, props.height, props.scale || 1)
   }
 })
 
-// Re-initialize only if dimensions change significantly
+// Sync stage size and scale whenever props change (e.g. on zoom or page navigation)
 watch(() => [props.width, props.height, props.scale], ([width, height, scale]) => {
-  if (containerRef.value && width && height && isInitialized.value && overlay.stage.value) {
-    overlay.stage.value.width(width as number)
-    overlay.stage.value.height(height as number)
-    overlay.stage.value.scale({ x: (scale as number) || 1, y: (scale as number) || 1 })
-    overlay.stage.value.draw()
+  if (width && height && isInitialized.value) {
+    overlay.setSize(width as number, height as number, (scale as number) || 1)
   }
 })
 
@@ -56,7 +50,6 @@ defineExpose({
   addCircle: overlay.addCircle,
   addLine: overlay.addLine,
   addTriangle: overlay.addTriangle,
-  addHighlight: overlay.addHighlight,
   deleteSelected: overlay.deleteSelected,
   getOverlaysJSON: overlay.getOverlaysJSON,
   getSelectedTextNode: overlay.getSelectedTextNode,
@@ -66,10 +59,13 @@ defineExpose({
   updateTextFormatting: overlay.updateTextFormatting,
   updateTextColor: overlay.updateTextColor,
   updateShapeFormatting: overlay.updateShapeFormatting,
+  updateImageFormatting: overlay.updateImageFormatting,
   setSelectMode: overlay.setSelectMode,
   setPageBackground: overlay.setPageBackground,
   switchPage: overlay.switchPage,
   deletePageOverlays: overlay.deletePageOverlays,
+  bringForward: overlay.bringForward,
+  sendBackward: overlay.sendBackward,
 })
 </script>
 

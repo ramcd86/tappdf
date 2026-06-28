@@ -13,7 +13,7 @@
       <div v-else class="relative">
         <canvas
           ref="canvasRef"
-          class="border border-gray-300 shadow-lg mx-auto bg-white"
+          class="block border border-gray-300 shadow-lg mx-auto bg-white"
         />
       </div>
     </div>

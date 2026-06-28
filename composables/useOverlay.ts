@@ -24,10 +24,17 @@ export const selectedShapeFormattingState = ref<{
   strokeColor: string
   fillColor: string
   shapeType: string
+  opacity: number
 } | null>(null)
 
 // Reactive page background colour (shown in formatting bar when nothing is selected)
 export const currentPageBackgroundState = ref<string>('#ffffff')
+
+// True whenever any canvas object is selected (text, shape, image, highlight)
+export const hasSelectionState = ref(false)
+
+// Reactive image formatting state (opacity)
+export const selectedImageFormattingState = ref<{ opacity: number } | null>(null)
 
 export function useOverlay() {
   const state = reactive<OverlayState>({
@@ -92,7 +99,16 @@ export function useOverlay() {
       strokeColor: (node.stroke() as string) || '#000000',
       fillColor,
       shapeType,
+      opacity: node.opacity(),
     }
+  }
+
+  function syncImageFormattingState(node: Konva.Image | null) {
+    if (!node) {
+      selectedImageFormattingState.value = null
+      return
+    }
+    selectedImageFormattingState.value = { opacity: node.opacity() }
   }
 
   /**
@@ -142,6 +158,8 @@ export function useOverlay() {
         transformer?.nodes([])
         syncFormattingState(null)
         selectedShapeFormattingState.value = null
+        selectedImageFormattingState.value = null
+        hasSelectionState.value = false
       }
     })
 
@@ -235,6 +253,8 @@ export function useOverlay() {
         transformer?.nodes([])
         syncFormattingState(null)
         selectedShapeFormattingState.value = null
+        selectedImageFormattingState.value = null
+        hasSelectionState.value = false
         if (selectModeActive) clearSelectHighlights()
         layer?.draw()
       }
@@ -251,6 +271,7 @@ export function useOverlay() {
   function selectNode(node: Konva.Node): void {
     transformer!.nodes([node])
     transformer!.moveToTop()
+    hasSelectionState.value = true
   }
 
   /**
@@ -280,6 +301,7 @@ export function useOverlay() {
       layer!.draw()
       syncFormattingState(textNode)
       selectedShapeFormattingState.value = null
+      selectedImageFormattingState.value = null
     })
 
     // WYSIWYG inline editing on double-click
@@ -418,10 +440,16 @@ export function useOverlay() {
 
         image.on('click tap', () => {
           selectNode(image)
+          syncFormattingState(null)
+          selectedShapeFormattingState.value = null
+          syncImageFormattingState(image)
         })
 
         layer!.add(image)
         selectNode(image)
+        syncFormattingState(null)
+        selectedShapeFormattingState.value = null
+        syncImageFormattingState(image)
         layer!.draw()
         saveOverlays()
         resolve()
@@ -459,17 +487,17 @@ export function useOverlay() {
       selectNode(rect)
       syncShapeFormattingState(rect)
       syncFormattingState(null)
+      selectedImageFormattingState.value = null
     })
 
     layer.add(rect)
     selectNode(rect)
+    syncShapeFormattingState(rect)
+    syncFormattingState(null)
+    selectedImageFormattingState.value = null
     layer.draw()
     saveOverlays()
   }
-
-  /**
-   * Add circle/ellipse shape
-   */
   function addCircle(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
@@ -497,17 +525,17 @@ export function useOverlay() {
       selectNode(circle)
       syncShapeFormattingState(circle)
       syncFormattingState(null)
+      selectedImageFormattingState.value = null
     })
 
     layer.add(circle)
     selectNode(circle)
+    syncShapeFormattingState(circle)
+    syncFormattingState(null)
+    selectedImageFormattingState.value = null
     layer.draw()
     saveOverlays()
   }
-
-  /**
-   * Add line shape
-   */
   function addLine(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
@@ -529,17 +557,17 @@ export function useOverlay() {
       selectNode(line)
       syncShapeFormattingState(line)
       syncFormattingState(null)
+      selectedImageFormattingState.value = null
     })
 
     layer.add(line)
     selectNode(line)
+    syncShapeFormattingState(line)
+    syncFormattingState(null)
+    selectedImageFormattingState.value = null
     layer.draw()
     saveOverlays()
   }
-
-  /**
-   * Add triangle shape
-   */
   function addTriangle(options?: Record<string, unknown>) {
     if (!layer || !transformer)
       return
@@ -562,39 +590,14 @@ export function useOverlay() {
       selectNode(triangle)
       syncShapeFormattingState(triangle)
       syncFormattingState(null)
+      selectedImageFormattingState.value = null
     })
 
     layer.add(triangle)
     selectNode(triangle)
-    layer.draw()
-    saveOverlays()
-  }
-
-  /**
-   * Add highlight overlay
-   */
-  function addHighlight(options?: Record<string, unknown>) {
-    if (!layer || !transformer)
-      return
-
-    const highlight = new Konva.Rect({
-      x: 100,
-      y: 100,
-      width: 200,
-      height: 30,
-      fill: 'rgba(255, 255, 0, 0.3)',
-      draggable: true,
-      name: 'overlay-object',
-      ...options,
-    })
-
-    // Select on click
-    highlight.on('click tap', () => {
-      selectNode(highlight)
-    })
-
-    layer.add(highlight)
-    selectNode(highlight)
+    syncShapeFormattingState(triangle)
+    syncFormattingState(null)
+    selectedImageFormattingState.value = null
     layer.draw()
     saveOverlays()
   }
@@ -766,7 +769,7 @@ export function useOverlay() {
   /**
    * Update stroke/fill properties on the currently selected shape
    */
-  function updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }) {
+  function updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }) {
     if (!transformer) return
     const nodes = transformer.nodes()
     if (nodes.length === 0) return
@@ -778,6 +781,7 @@ export function useOverlay() {
     if (props.fillColor !== undefined) {
       node.fill(props.fillColor === 'transparent' ? '' : props.fillColor)
     }
+    if (props.opacity !== undefined) node.opacity(props.opacity)
 
     layer?.draw()
     syncShapeFormattingState(node)
@@ -844,10 +848,61 @@ export function useOverlay() {
     if (nodes.length > 0) {
       nodes.forEach(node => node.destroy())
       transformer.nodes([])
+      syncFormattingState(null)
+      selectedShapeFormattingState.value = null
+      selectedImageFormattingState.value = null
+      hasSelectionState.value = false
       layer?.draw()
       saveOverlays()
       console.log('🗑️ Deleted selected object')
     }
+  }
+
+  function updateImageFormatting(props: { opacity?: number }) {
+    if (!transformer) return
+    const nodes = transformer.nodes()
+    if (nodes.length === 0) return
+    const node = nodes[0]
+    if (!(node instanceof Konva.Image)) return
+
+    if (props.opacity !== undefined) node.opacity(props.opacity)
+
+    layer?.draw()
+    syncImageFormattingState(node)
+    saveOverlays()
+  }
+
+  /**
+   * Move the selected element one step forward in z-order (closer to viewer).
+   */
+  function bringForward(): void {
+    if (!transformer || !layer) return
+    const nodes = transformer.nodes()
+    if (!nodes.length) return
+    const node = nodes[0]
+    const overlayObjects = layer.find('.overlay-object')
+    if (overlayObjects[overlayObjects.length - 1] === node) return // already on top
+    node.moveUp()
+    transformer.moveToTop()
+    layer.draw()
+    saveOverlays()
+  }
+
+  /**
+   * Move the selected element one step backward in z-order (further from viewer).
+   * Will not move below the lowest overlay-object.
+   */
+  function sendBackward(): void {
+    if (!transformer || !layer) return
+    const nodes = transformer.nodes()
+    if (!nodes.length) return
+    const node = nodes[0]
+    const overlayObjects = layer.find('.overlay-object')
+    if (overlayObjects[0] === node) return // already at the bottom
+    node.moveDown()
+    transformer.moveToTop()
+    layer.draw()
+    saveOverlays()
   }
 
   /**
@@ -920,22 +975,13 @@ export function useOverlay() {
       }
     }
     else if (node instanceof Konva.Rect) {
-      const fill = node.fill()
-      if (fill && typeof fill === 'string' && fill.includes('rgba')) {
-        baseOverlay.type = 'highlight'
-        baseOverlay.data = {
-          color: fill,
-          opacity: node.opacity(),
-        }
-      }
-      else {
-        baseOverlay.type = 'shape'
-        baseOverlay.data = {
-          shapeType: 'rectangle',
-          fill: fill as string,
-          stroke: node.stroke(),
-          strokeWidth: node.strokeWidth(),
-        }
+      baseOverlay.type = 'shape'
+      baseOverlay.data = {
+        shapeType: 'rectangle',
+        fill: node.fill() as string,
+        stroke: node.stroke(),
+        strokeWidth: node.strokeWidth(),
+        opacity: node.opacity(),
       }
     }
     else if (node instanceof Konva.Ellipse) {
@@ -945,6 +991,7 @@ export function useOverlay() {
         fill: node.fill(),
         stroke: node.stroke(),
         strokeWidth: node.strokeWidth(),
+        opacity: node.opacity(),
       }
     }
     else if (node instanceof Konva.Line) {
@@ -956,6 +1003,7 @@ export function useOverlay() {
         fill: isClosed ? ((node as Konva.Line).fill() as string) : undefined,
         stroke: node.stroke() as string,
         strokeWidth: node.strokeWidth(),
+        opacity: node.opacity(),
       }
     }
 
@@ -1021,6 +1069,7 @@ export function useOverlay() {
           fill: overlay.data.fill,
           stroke: overlay.data.stroke,
           strokeWidth: overlay.data.strokeWidth,
+          opacity: overlay.data.opacity ?? 1,
           rotation: overlay.rotation,
         })
       }
@@ -1033,6 +1082,7 @@ export function useOverlay() {
           fill: overlay.data.fill,
           stroke: overlay.data.stroke,
           strokeWidth: overlay.data.strokeWidth,
+          opacity: overlay.data.opacity ?? 1,
           rotation: overlay.rotation,
         })
       }
@@ -1043,6 +1093,7 @@ export function useOverlay() {
           points: overlay.data.points || [0, 0, 200, 0],
           stroke: overlay.data.stroke,
           strokeWidth: overlay.data.strokeWidth,
+          opacity: overlay.data.opacity ?? 1,
           rotation: overlay.rotation,
         })
       }
@@ -1054,16 +1105,7 @@ export function useOverlay() {
           fill: overlay.data.fill,
           stroke: overlay.data.stroke,
           strokeWidth: overlay.data.strokeWidth,
-          rotation: overlay.rotation,
-        })
-      }
-      else if (overlay.type === 'highlight') {
-        addHighlight({
-          x: overlay.x,
-          y: overlay.y,
-          width: overlay.width,
-          height: overlay.height,
-          fill: overlay.data.color,
+          opacity: overlay.data.opacity ?? 1,
           rotation: overlay.rotation,
         })
       }
@@ -1157,16 +1199,24 @@ export function useOverlay() {
     selectedFormatting.value = null
   }
 
+  function setSize(width: number, height: number, scale: number): void {
+    if (!stage) return
+    stage.width(width)
+    stage.height(height)
+    stage.scale({ x: scale, y: scale })
+    stage.draw()
+  }
+
   return {
     state: readonly(state),
     stage: readonly(stageRef),
     selectedFormatting: readonly(selectedFormatting),
     initCanvas,
+    setSize,
     addText,
     addImage,
     addRectangle,
     addCircle,
-    addHighlight,
     deleteSelected,
     clearCanvas,
     saveOverlays,
@@ -1179,12 +1229,15 @@ export function useOverlay() {
     updateTextFormatting,
     updateTextColor,
     updateShapeFormatting,
+    updateImageFormatting,
     addLine,
     addTriangle,
     setSelectMode,
     setPageBackground,
     switchPage,
     deletePageOverlays,
+    bringForward,
+    sendBackward,
     dispose,
   }
 }

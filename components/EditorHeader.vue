@@ -203,6 +203,37 @@
             @input="onShapeFillColor"
           >
         </template>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <!-- Opacity -->
+        <label class="text-xs text-gray-400">Opacity</label>
+        <input
+          :value="Math.round(shapeFormatting.opacity * 100)"
+          type="range"
+          min="5"
+          max="100"
+          step="5"
+          class="w-24"
+          @input="onShapeOpacity"
+        >
+        <span class="text-xs text-gray-500 w-7 text-right">{{ Math.round(shapeFormatting.opacity * 100) }}%</span>
+      </template>
+
+      <template v-else-if="imageFormatting">
+        <span class="text-xs font-medium text-gray-400 uppercase">Image:</span>
+
+        <label class="text-xs text-gray-400">Opacity</label>
+        <input
+          :value="Math.round(imageFormatting.opacity * 100)"
+          type="range"
+          min="5"
+          max="100"
+          step="5"
+          class="w-24"
+          @input="onImageOpacity"
+        >
+        <span class="text-xs text-gray-500 w-7 text-right">{{ Math.round(imageFormatting.opacity * 100) }}%</span>
       </template>
 
       <span
@@ -224,12 +255,33 @@
           Reset
         </button>
       </span>
+
+      <!-- Layer order controls — visible whenever any element is selected -->
+      <template v-if="hasSelectionState">
+        <div class="w-px h-6 bg-gray-600 ml-auto" />
+        <div class="flex gap-1">
+          <button
+            title="Bring Forward"
+            class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            @click="emit('bring-forward')"
+          >
+            ↑
+          </button>
+          <button
+            title="Send Backward"
+            class="px-2 py-1 text-sm border border-gray-600 rounded hover:bg-gray-700 transition-colors text-gray-300"
+            @click="emit('send-backward')"
+          >
+            ↓
+          </button>
+        </div>
+      </template>
     </div>
   </header>
 </template>
 
 <script setup lang="ts">
-import { selectedFormattingState, selectedShapeFormattingState, currentPageBackgroundState } from '~/composables/useOverlay'
+import { selectedFormattingState, selectedShapeFormattingState, selectedImageFormattingState, currentPageBackgroundState, hasSelectionState } from '~/composables/useOverlay'
 
 const _props = defineProps<{
   documentId: string | undefined
@@ -246,13 +298,17 @@ const emit = defineEmits<{
   'toggle-text-decoration': [decoration: 'underline' | 'line-through']
   'update-text-formatting': [props: Record<string, unknown>]
   'update-text-color': [color: string]
-  'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string }]
+  'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }]
+  'update-image-formatting': [props: { opacity: number }]
   'update-page-background': [color: string]
+  'bring-forward': []
+  'send-backward': []
 }>()
 
 const pdf = usePDF()
 const textFormatting = selectedFormattingState
 const shapeFormatting = selectedShapeFormattingState
+const imageFormatting = selectedImageFormattingState
 const pageBackground = currentPageBackgroundState
 
 const fontFamilies = ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS', 'Impact']
@@ -284,6 +340,14 @@ function onShapeFillToggle(event: Event) {
 
 function onShapeFillColor(event: Event) {
   emit('update-shape-formatting', { fillColor: (event.target as HTMLInputElement).value })
+}
+
+function onShapeOpacity(event: Event) {
+  emit('update-shape-formatting', { opacity: parseInt((event.target as HTMLInputElement).value, 10) / 100 })
+}
+
+function onImageOpacity(event: Event) {
+  emit('update-image-formatting', { opacity: parseInt((event.target as HTMLInputElement).value, 10) / 100 })
 }
 
 function onPageBackgroundChange(event: Event) {

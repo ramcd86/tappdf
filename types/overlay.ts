@@ -1,7 +1,7 @@
 export interface OverlayObject {
   id: string
   page: number
-  type: 'text' | 'image' | 'shape' | 'highlight' | 'drawing' | 'background'
+  type: 'text' | 'image' | 'shape' | 'drawing' | 'background'
   x: number
   y: number
   width?: number
@@ -39,14 +39,7 @@ export interface ShapeOverlay extends OverlayObject {
     fill?: string
     stroke?: string
     strokeWidth?: number
-  }
-}
-
-export interface HighlightOverlay extends OverlayObject {
-  type: 'highlight'
-  data: {
-    color: string
-    opacity: number
+    opacity?: number
   }
 }
 
