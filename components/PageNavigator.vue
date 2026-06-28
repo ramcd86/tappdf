@@ -1,7 +1,7 @@
 <template>
   <div class="flex items-center gap-3">
     <button
-      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200 pagination-button"
       :disabled="pdf.state.currentPage <= 1"
       @click="pdf.previousPage()"
     >
@@ -13,7 +13,7 @@
     </span>
 
     <button
-      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200"
+      class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-200 pagination-button"
       :disabled="pdf.state.currentPage >= pdf.state.totalPages"
       @click="pdf.nextPage()"
     >
@@ -45,3 +45,9 @@
 <script setup lang="ts">
 const pdf = usePDF()
 </script>
+
+<style scoped>
+.pagination-button:hover {
+  cursor: pointer;
+}
+</style>
