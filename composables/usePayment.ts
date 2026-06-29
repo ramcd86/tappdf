@@ -56,6 +56,14 @@ export function usePayment() {
     state.processing = true
     state.error = null
 
+    if (config.public.paymentMockMode) {
+      state.clientSecret = null
+      state.paymentIntentId = `pi_mock_client_${Date.now()}`
+      state.isMock = true
+      state.processing = false
+      return true
+    }
+
     try {
       const response = await $fetch<{
         success: boolean
@@ -71,7 +79,7 @@ export function usePayment() {
 
       state.clientSecret = response.clientSecret
       state.paymentIntentId = response.paymentIntentId
-      state.isMock = true
+      state.isMock = response.isMock ?? false
 
       return true
     }
@@ -162,7 +170,7 @@ export function usePayment() {
     }
 
     // In mock mode, simulate successful payment
-    const isMockMode = !config.public.stripePublishableKey || config.public.stripePublishableKey.startsWith('pk_test_mock')
+    const isMockMode = config.public.paymentMockMode || !config.public.stripePublishableKey || config.public.stripePublishableKey.startsWith('pk_test_mock')
 
     if (isMockMode) {
       console.log('🔷 Mock payment mode - simulating payment success')

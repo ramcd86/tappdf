@@ -71,6 +71,7 @@ const props = defineProps<{
   documentId?: string
 }>()
 
+const config = useRuntimeConfig()
 const payment = usePayment()
 
 const isOpen = ref(false)
@@ -88,6 +89,12 @@ async function open() {
   canPay.value = false
   processing.value = false
   isMockMode.value = false
+
+  if (config.public.paymentMockMode) {
+    isMockMode.value = true
+    canPay.value = true
+    return
+  }
 
   if (props.documentId) {
     const success = await payment.createPaymentIntent(props.documentId, [])

@@ -5,7 +5,7 @@
 import Stripe from 'stripe'
 
 const STRIPE_SECRET_KEY = process.env.STRIPE_SECRET_KEY || ''
-const PAYMENT_MOCK_MODE = process.env.PAYMENT_MOCK_MODE === 'true'
+const PAYMENT_MOCK_MODE = process.env.PAYMENT_MOCK_MODE !== 'false'
 const IS_MOCK = PAYMENT_MOCK_MODE || !STRIPE_SECRET_KEY || STRIPE_SECRET_KEY.startsWith('mock_')
 
 let stripeInstance: Stripe | null = null

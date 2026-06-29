@@ -55,6 +55,7 @@ export default defineNuxtConfig({
       paymentAmount: parseInt(process.env.PAYMENT_AMOUNT || '99'),
       paymentCurrency: process.env.PAYMENT_CURRENCY || 'eur',
       fileExpiryHours: parseInt(process.env.FILE_EXPIRY_HOURS || '24'),
+      paymentMockMode: process.env.PAYMENT_MOCK_MODE !== 'false',
     },
   },
 
