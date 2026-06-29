@@ -106,6 +106,7 @@ const pdfScale = ref(1)
 const isDownloading = ref(false)
 const isAddingPage = ref(false)
 const isDeletingPage = ref(false)
+const isReloadingPdf = ref(false)
 
 const pdf = usePDF()
 
@@ -121,6 +122,7 @@ function withCacheBust(url: string): string {
 
 // When the PDF page changes, switch the overlay canvas to show only that page's elements
 watch(() => pdf.state.currentPage, (newPage) => {
+  if (isReloadingPdf.value) return
   if (newPage <= 0 || !overlayCanvas.value) return
   overlayCanvas.value?.switchPage(newPage - 1) // PDF page is 1-indexed, overlay is 0-indexed
 }, { immediate: false })
@@ -177,14 +179,18 @@ async function handleAddPage() {
   try {
     const result = await $fetch<{ pageCount: number, uploadUrl: string }>(`/api/document/${documentId}/add-page`, { method: 'POST' })
     if (result.pageCount && result.uploadUrl) {
+      isReloadingPdf.value = true
       await pdf.loadPDF(withCacheBust(result.uploadUrl))
       pdf.goToPage(result.pageCount)
+      await nextTick()
+      await overlayCanvas.value?.switchPage(result.pageCount - 1)
     }
   }
   catch (error) {
     console.error('Failed to add page:', error)
   }
   finally {
+    isReloadingPdf.value = false
     isAddingPage.value = false
   }
 }
@@ -201,19 +207,21 @@ async function handleDeletePage() {
     })
     if (result.pageCount && result.uploadUrl) {
       const targetPage = Math.min(pdf.state.currentPage, result.pageCount)
+      isReloadingPdf.value = true
       await pdf.loadPDF(withCacheBust(result.uploadUrl))
       pdf.goToPage(targetPage)
       // Explicitly switch the overlay canvas to the target page — necessary when
       // currentPage doesn't change value (e.g. deleting page 2 while on page 1)
       // because the watcher only fires on value changes.
       await nextTick()
-      overlayCanvas.value?.switchPage(targetPage - 1)
+      await overlayCanvas.value?.switchPage(targetPage - 1)
     }
   }
   catch (error) {
     console.error('Failed to delete page:', error)
   }
   finally {
+    isReloadingPdf.value = false
     isDeletingPage.value = false
   }
 }

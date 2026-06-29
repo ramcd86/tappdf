@@ -65,6 +65,7 @@ export function useOverlay() {
   let selectModeActive = false
   // Suppress saveOverlays() calls while loadOverlaysForPage is reconstructing the canvas
   let _loadingOverlays = false
+  let overlayLoadToken = 0
 
   // Refs for external access
   const stageRef = ref<Konva.Stage | null>(null)
@@ -1183,6 +1184,7 @@ export function useOverlay() {
     if (!layer)
       return
 
+    const loadToken = ++overlayLoadToken
     clearCanvas()
     state.currentPage = pageNumber
 
@@ -1204,6 +1206,7 @@ export function useOverlay() {
 
     // Use for...of so we can properly await async addImage calls
     for (const overlay of pageOverlays) {
+      if (loadToken !== overlayLoadToken) return
       if (overlay.type === 'text' && overlay.data.text) {
         addText(overlay.data.text, {
           x: overlay.x,
@@ -1229,6 +1232,7 @@ export function useOverlay() {
           rotation: overlay.rotation,
           opacity: overlay.data.opacity,
         })
+        if (loadToken !== overlayLoadToken) return
       }
       else if (overlay.type === 'shape' && overlay.data.shapeType === 'rectangle') {
         addRectangle({
@@ -1286,6 +1290,7 @@ export function useOverlay() {
 
     // Re-enable saving and do a single authoritative save now that every
     // element (including async images) is on the canvas.
+    if (loadToken !== overlayLoadToken) return
     _loadingOverlays = false
     saveOverlays()
 
