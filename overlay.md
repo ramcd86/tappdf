@@ -1,360 +1,246 @@
-# PDF Microtransaction Editor
+# tapPDF Architecture Notes
 
-## Technical Architecture & Core Project Concepts
+## Current Product Goal
 
----
+tapPDF is a lightweight PDF editor built around a simple promise:
 
-## 1. Project Goal
+- create or upload a PDF
+- make quick edits in the browser
+- pay once at export time
+- download the processed PDF
 
-Build a lightweight web application that allows users to:
+The product is not a SaaS workspace. There are no accounts, no subscriptions, and no persistent document library. Files are temporary and document records expire.
 
-- Upload existing PDFs **or** create new ones
-- Perform simple editing operations
-- Pay a small one-time fee (≈ €0.50–€0.99)
-- Download the final processed PDF
+The current alpha keeps payments mocked in production while the editor, storage, database, and PDF generation paths run against real infrastructure.
 
-The product is **not SaaS** and does **not require user accounts**.
+## Core Principles
 
-The system prioritizes:
+### No Accounts
 
-- Extremely fast time-to-value
-- Zero onboarding friction
-- Simple payment experience
-- Temporary file storage
-- Low operating cost
+Users are anonymous by default. A document is identified by an opaque document id, and all files are temporary.
 
----
+### Pay On Export
 
-## 2. Core Principles
+Editing is free. Payment is only encountered when the user chooses to download the final PDF.
 
-### 2.1 No Persistent Accounts
+During the alpha, payment is mocked by default on both server and client. Real Stripe is enabled later by setting:
 
-- Users are anonymous by default
-- Each session is temporary
-- Files expire automatically
-- Optional email capture only after payment
-
----
-
-### 2.2 Pay-on-Export Model
-
-Users may:
-
-- Upload and edit PDFs freely
-- Only encounter payment when exporting
-
-This maximizes conversion and minimizes abandonment.
-
----
-
-### 2.3 Immutable PDF Strategy
-
-Original PDFs are never edited in-place.
-
-Instead:
-
-```
-Original PDF (read-only)
-+ Overlay edit instructions (JSON)
-= Newly generated PDF
+```env
+PAYMENT_MOCK_MODE=false
 ```
 
-This avoids corruption, simplifies undo/redo, and ensures consistency.
+### Immutable Overlay Strategy
 
----
+The app does not rewrite PDF internals in the browser. The editing model is:
 
-## 3. Technology Stack
+```text
+Source PDF
++ Overlay JSON
+= Generated final PDF
+```
+
+The browser owns rendering and editing UX. The server owns final PDF generation.
+
+### Immutable Page Mutation
+
+Page add/delete operations now also avoid overwriting the same Blob object. Each page-structure mutation writes a new source PDF pathname and updates `documents.upload_path`.
+
+This prevents production flakiness caused by Vercel Blob/CDN/PDF.js serving stale bytes after same-path overwrites.
+
+## Tech Stack
 
 ### Frontend
 
-- **Nuxt 3**
-- **TypeScript**
-- **PDF.js (pdfjs-dist)** – PDF rendering
-- **Fabric.js** – editable overlay canvas
-- **Stripe Payment Element** – payments
+- Nuxt 3
+- Vue 3
+- TypeScript
+- Tailwind CSS
+- PDF.js (`pdfjs-dist`) for page rendering
+- Konva.js for editable overlay canvas
+- Stripe Payment Element support, currently bypassed by mock mode
+
+`fabric` remains in dependencies as legacy baggage but should not be used for new work.
 
 ### Server
 
-- **Nitro (Nuxt server engine)**
-- Runs as serverless functions on Vercel
+- Nitro API routes
+- `pdf-lib` for PDF creation and export
+- Vercel Blob for temporary file storage
+- Postgres metadata storage via the `postgres` package
+- Stripe SDK with mock mode default
 
-### Backend Libraries
+### Hosting
 
-- **pdf-lib** – PDF generation and modification
-- **Stripe SDK** – payments & webhooks
+- Vercel app hosting
+- Vercel Blob, configured as private storage
+- Supabase/Postgres-compatible `POSTGRES_URL`
 
-### Hosting & Infrastructure
+## High-Level Flow
 
-- **Vercel** – application hosting
-- **Vercel Postgres** – minimal metadata storage
-- **Vercel Blob Storage** – temporary file storage
+```text
+Browser
+  PDF.js background canvas
+  Konva overlay canvas
+  Editor controls
+  Mock/Stripe payment modal
 
----
+Nitro API
+  create blank PDF
+  upload PDF
+  save overlay JSON
+  add/delete pages
+  generate final PDF
+  serve private Blob files through /api/storage
 
-## 4. High-Level Architecture
-
-```
-Browser (Nuxt)
-│
-├── PDF Viewer (PDF.js)
-├── Edit Layer (Fabric.js)
-├── Stripe Payment Modal
-│
-▼
-Nitro API Routes
-│
-├── Upload handler
-├── Payment intent creation
-├── Webhook receiver
-├── PDF generation
-│
-▼
-Vercel Storage
-
-- Original PDF
-- Overlay JSON
-- Final PDF (temporary)
+Storage/DB
+  private Blob files
+  document metadata
+  payment metadata
 ```
 
----
+## File Storage
 
-## 5. Frontend Architecture
+Production Blob storage is private. The browser does not load Vercel Blob URLs directly.
 
-### 5.1 PDF Rendering
+Instead:
 
-- PDF.js renders each page to a background canvas
-- Canvas dimensions are locked to PDF page size
+- files are uploaded to private Vercel Blob with `access: 'private'`
+- DB records store Blob pathnames
+- browser-facing URLs use `/api/storage/:filename`
+- `/api/storage/:filename` streams private Blob contents through Nitro
+- storage responses use `Cache-Control: no-store`
 
-Each page contains:
+This is especially important for PDF.js, which can otherwise cache or reuse stale document bytes.
 
-- **Background canvas** – rendered PDF page
-- **Overlay canvas** – editable objects
+## Document Lifecycle
 
----
+### Create Blank
 
-### 5.2 Editable Objects
+1. Server creates an A4 PDF with `pdf-lib`.
+2. PDF is uploaded to private Blob.
+3. Document metadata is inserted into Postgres.
+4. Browser receives a document id and app storage URL.
 
-Overlay objects stored as JSON:
+### Edit
 
-- Text blocks
-- Images
-- Shapes
-- Highlights
-- Freehand drawings
+1. PDF.js renders the current source PDF.
+2. Konva renders overlays on top.
+3. Overlays are serialized as JSON.
+4. Multi-page overlay state is stored per page index.
 
-Example:
+Implemented editor capabilities include:
 
-```json
-{
-  "page": 1,
-  "type": "text",
-  "x": 120,
-  "y": 340,
-  "fontSize": 14,
-  "value": "Invoice Paid"
-}
-```
+- text overlays
+- image overlays
+- rectangle, circle/ellipse, line, and triangle shapes
+- page backgrounds
+- selection, drag, resize, rotate
+- layer ordering controls
+- multi-page navigation
+- add/delete page
+- zoom-aware rendering/export
 
-Overlay data is saved periodically to prevent loss.
+### Add/Delete Page
 
----
+1. Server reads the current source PDF from Blob.
+2. `pdf-lib` adds or removes the requested page.
+3. Server writes a new source PDF Blob pathname.
+4. `documents.upload_path` is updated.
+5. API returns the new `uploadUrl` and page count.
+6. Client reloads PDF.js from that exact returned URL.
 
-### 5.3 Client-Side Responsibilities
-
-- Rendering
-- Editing UX
-- Undo/redo
-- Zoom
-- Page navigation
-- Overlay serialization
-
-The frontend **never generates the final PDF**.
-
----
-
-## 6. Backend (Nitro) Responsibilities
-
-### Nitro API routes handle:
-
-- File uploads
-- Temporary storage
-- Stripe payment intent creation
-- Payment verification via webhook
-- Final PDF generation
-- Signed download URL creation
-
-The backend is stateless aside from storage.
-
----
-
-## 7. File Lifecycle
-
-### Upload
-
-1. User uploads PDF
-2. File stored in Vercel Blob
-3. Metadata stored in Postgres
-4. Expiry timestamp assigned
-
----
-
-### Editing
-
-- Original PDF remains unchanged
-- Overlay JSON updated client-side
-- Periodic autosave to backend
-
----
+The UI disables both page mutation buttons while either add or delete is in progress.
 
 ### Export
 
-1. User clicks Download
-2. Stripe PaymentIntent created
-3. Payment modal opens
-4. Stripe confirms payment
-5. Webhook verifies payment
-6. PDF generated using pdf-lib
-7. File stored temporarily
-8. Signed download link returned
+1. Current overlays are saved to `/api/overlay/:id`.
+2. In mock mode, modal shows "Simulate Payment & Download".
+3. `/api/generate` reads the source PDF and overlay JSON.
+4. Server bakes overlays into a final PDF with `pdf-lib`.
+5. Final PDF is uploaded to private Blob.
+6. Download uses app-routed storage/download endpoints.
 
----
+## Payment Mode
 
-### Cleanup
+Payments are mocked by default, including production alpha.
 
-- Cron job deletes files after 1–24 hours
-- Metadata cleaned automatically
+Mock mode is active unless:
 
----
-
-## 8. Payment Architecture
-
-### Stripe Payment Element
-
-Supports automatically:
-
-- Apple Pay
-- Google Pay
-- Credit/Debit cards
-- Local payment methods
-
-Single integration point.
-
----
-
-### Payment Flow
-
-```
-User clicks Download
-│
-├── POST /api/payment/create-intent
-│
-├── Stripe Payment Element
-│
-├── Payment confirmation
-│
-├── Stripe webhook → /api/payment/webhook
-│
-└── PDF generation unlocked
+```env
+PAYMENT_MOCK_MODE=false
 ```
 
----
+When mock mode is active:
 
-### Security Rules
+- the client does not mount Stripe Elements
+- the modal does not call `/api/payment/create-intent`
+- `/api/generate` allows export without a real paid Stripe status
 
-- Frontend payment confirmation is not trusted
-- Only Stripe webhooks authorize exports
-- Download URLs are signed and time-limited
+When real payments are enabled later, the intended production rule remains:
 
----
+- frontend payment success is not trusted
+- Stripe webhook success authorizes export
+- generated downloads should be time-limited and ownership-protected
 
-## 9. Database Schema (Minimal)
+## Database
+
+The app uses a minimal metadata schema.
 
 ### documents
 
-| Field | Type |
-|------|------|
-| id | uuid |
-| upload_path | text |
-| overlay_path | text |
-| final_path | text |
-| payment_status | enum |
-| expires_at | timestamp |
-
----
+| Field | Purpose |
+| --- | --- |
+| id | opaque document id |
+| upload_path | current source PDF Blob pathname |
+| overlay_path | overlay JSON Blob pathname |
+| final_path | generated final PDF Blob pathname |
+| payment_status | pending, paid, failed |
+| created_at | creation timestamp |
+| expires_at | expiry timestamp |
 
 ### payments
 
-| Field | Type |
-|------|------|
-| id | uuid |
-| stripe_intent_id | text |
-| document_id | uuid |
-| amount | integer |
-| currency | text |
-| status | text |
+| Field | Purpose |
+| --- | --- |
+| id | payment row id |
+| stripe_intent_id | Stripe or mock intent id |
+| document_id | associated document |
+| amount | amount in cents |
+| currency | payment currency |
+| status | payment status |
+| created_at | creation timestamp |
 
----
+Production DB access now uses the generic `postgres` client so Supabase/Postgres-compatible URLs work. Local development still falls back to `.storage/mock-db.json` when `POSTGRES_URL` is absent.
 
-## 10. MVP Feature Scope
+## Current Hardening Completed
 
-### Included
+- Upgraded `@vercel/blob` for private Blob support.
+- Switched production Blob writes to `access: 'private'`.
+- Routed browser file access through `/api/storage`.
+- Normalized DB storage to use pathnames instead of public URLs.
+- Added no-cache headers for app-served storage files.
+- Added `postgres` DB client for Supabase-compatible production URLs.
+- Added guarded one-time schema initialization before production DB queries.
+- Made payment mock mode the default on server and client.
+- Prevented Stripe Elements from mounting during mock mode.
+- Made add/delete page write new source PDFs instead of overwriting Blob paths.
+- Updated editor reload logic to use returned source PDF URLs.
+- Added local Nuxt dev shim for `#app-manifest` resolution.
 
-- Upload PDF
-- View pages
-- Add text
-- Add images
-- Move / resize objects
-- Export after payment
+## Deferred Work
 
----
+- Real Stripe activation and webhook hardening.
+- Signed or ownership-protected download URLs.
+- Cleanup cron for expired documents and orphaned Blob files.
+- Rate limiting uploads and generation.
+- Undo/redo.
+- Toast/error UI instead of console-only failures.
+- Mobile editor layout.
 
-### Deferred
+## Summary
 
-- User accounts
-- Collaboration
-- Form field recognition
-- OCR
-- PDF text rewriting
-- Subscription plans
+tapPDF is optimized for fast, one-off PDF editing. The architecture intentionally avoids deep PDF editing complexity by treating edits as overlay instructions and generating a fresh final PDF server-side.
 
----
-
-## 11. Cost Considerations
-
-- Vercel serverless execution: minimal
-- Blob storage: temporary only
-- Stripe fees: mitigated via €0.99 pricing or credit packs
-
-Estimated cost per 1,000 documents is extremely low.
-
----
-
-## 12. Future Extensions
-
-- Credit bundles
-- Saved document history
-- Email delivery
-- Branded exports
-- Team access
-- API access
-
----
-
-## 13. Summary
-
-This architecture:
-
-- Avoids PDF complexity traps
-- Scales naturally with demand
-- Keeps infrastructure simple
-- Supports microtransactions cleanly
-- Allows rapid MVP development
-
-The system is intentionally narrow, composable, and disposable — optimized for speed, clarity, and conversion.
-
----
-
-**Primary objective:**
+Primary objective:
 
 > Convert one-time document friction into instant paid resolution.
-
