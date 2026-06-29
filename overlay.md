@@ -135,6 +135,8 @@ Implemented editor capabilities include:
 - rectangle, circle/ellipse, line, and triangle shapes
 - page backgrounds
 - selection, drag, resize, rotate
+- toolbar width, height, and rotation inputs for text, images, and shapes
+- 1 px arrow-key nudging for selected images and shapes
 - layer ordering controls
 - multi-page navigation
 - add/delete page
@@ -151,6 +153,15 @@ Implemented editor capabilities include:
 
 The UI disables both page mutation buttons while either add or delete is in progress.
 
+The client also suppresses automatic overlay page switching while the PDF is
+being reloaded after add/delete. After the PDF reload settles, the editor
+explicitly switches the overlay canvas to the intended target page. Overlay page
+loads use a cancellation token so stale async loads cannot continue adding old
+page elements to a newly selected page.
+
+This keeps newly added blank pages as true clean slates and prevents page 1
+objects from leaking onto later added pages.
+
 ### Export
 
 1. Current overlays are saved to `/api/overlay/:id`.
@@ -159,6 +170,12 @@ The UI disables both page mutation buttons while either add or delete is in prog
 4. Server bakes overlays into a final PDF with `pdf-lib`.
 5. Final PDF is uploaded to private Blob.
 6. Download uses app-routed storage/download endpoints.
+
+Export coordinate conversion accounts for the different rotation anchors used by
+Konva and `pdf-lib`. Konva image/rectangle nodes rotate around their browser
+top-left origin, while `pdf-lib` image/rectangle drawing rotates around a
+bottom-left PDF origin. The server shifts the PDF draw origin before applying
+rotation so the downloaded PDF matches the editor.
 
 ## Payment Mode
 
@@ -225,6 +242,11 @@ Production DB access now uses the generic `postgres` client so Supabase/Postgres
 - Prevented Stripe Elements from mounting during mock mode.
 - Made add/delete page write new source PDFs instead of overwriting Blob paths.
 - Updated editor reload logic to use returned source PDF URLs.
+- Guarded PDF reload page switching so new blank pages do not inherit stale overlays.
+- Added overlay page-load cancellation to prevent stale async image loads from leaking across pages.
+- Added manual width/height/rotation toolbar controls for text, images, and shapes.
+- Corrected rotated image/rectangle PDF export anchoring.
+- Added arrow-key 1 px nudging for selected images and shapes.
 - Added local Nuxt dev shim for `#app-manifest` resolution.
 
 ## Deferred Work

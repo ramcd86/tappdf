@@ -46,8 +46,10 @@ Production alpha currently uses real storage/database infrastructure, but paymen
 - Text overlays with formatting controls
 - Image overlays
 - Rectangle, circle/ellipse, line, and triangle shapes
+- Width, height, and rotation inputs for selected text, images, and shapes
 - Page background color overlays
 - Drag, resize, rotate, select, delete
+- 1 px arrow-key nudging for selected images and shapes
 - Layer ordering controls
 - Multi-page navigation
 - Add page
@@ -161,8 +163,12 @@ Coordinate notes:
 - PDF.js/Konva use top-left orientation in the browser.
 - `pdf-lib` uses bottom-left PDF coordinates.
 - Shape and text conversion lives in `server/utils/pdf-generator.ts`.
+- Image and rectangle export shifts the PDF draw origin before rotation so
+  `pdf-lib` output matches Konva's top-left rotation anchor.
 - Circle/ellipse `x`/`y` is treated as center coordinates.
 - Triangle export uses SVG path mapping with `x: 0, y: pageHeight`.
+- Toolbar size/rotation edits are applied live on `input` and saved into overlay
+  JSON before export.
 
 ## Page Mutation Fix
 
@@ -179,6 +185,17 @@ Current behavior avoids that:
 7. add/delete buttons are disabled while either mutation is in progress
 
 This prevents stale Blob/CDN/PDF.js bytes from being reused after a same-path overwrite.
+
+The editor also guards against overlay state leakage during page mutation:
+
+- automatic overlay page switching is suppressed while `pdf.loadPDF()` reloads
+  the mutated source PDF
+- after reload, the overlay canvas explicitly switches to the intended target page
+- overlay page loads use a token so stale async loads cannot keep adding old
+  elements after a newer page switch begins
+
+This ensures added pages remain blank and receive only their own page-specific
+overlays.
 
 ## Local Dev Fix
 
