@@ -317,6 +317,7 @@ export function useOverlay() {
         layer?.draw()
         syncShapeFormattingState(node)
       }
+      if (node) saveOverlays()
     })
 
     // Keyboard shortcuts - Delete/Backspace to delete selected object

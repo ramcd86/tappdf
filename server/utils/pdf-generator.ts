@@ -117,6 +117,20 @@ function getWrappedLines(text: string, font: any, fontSize: number, maxWidth: nu
   return lines.length ? lines : [text || '']
 }
 
+function getPdfOriginForKonvaTopLeft(
+  x: number,
+  y: number,
+  height: number,
+  rotation: number,
+  pageHeight: number,
+): { x: number; y: number } {
+  const theta = (rotation * Math.PI) / 180
+  return {
+    x: x - height * Math.sin(theta),
+    y: pageHeight - y - height * Math.cos(theta),
+  }
+}
+
 /**
  * Apply text overlay to page
  */
@@ -258,14 +272,15 @@ async function applyImageOverlay(
       }
     }
 
-    // PDF origin is bottom-left; Konva origin is top-left
-    const pdfY = pageHeight - y - height
+    // Shift pdf-lib's bottom-left draw origin so the rotated image matches
+    // Konva's top-left node origin.
+    const pdfOrigin = getPdfOriginForKonvaTopLeft(x, y, height, rotation, pageHeight)
 
-    console.log(`🖼  Image PDF coords: x=${x.toFixed(1)}, y_canvas=${y.toFixed(1)}, pdfY=${pdfY.toFixed(1)}, w=${width.toFixed(1)}, h=${height.toFixed(1)}`)
+    console.log(`Image PDF coords: x=${pdfOrigin.x.toFixed(1)}, y_canvas=${y.toFixed(1)}, pdfY=${pdfOrigin.y.toFixed(1)}, w=${width.toFixed(1)}, h=${height.toFixed(1)}, rotation=${rotation.toFixed(1)}`)
 
     page.drawImage(image, {
-      x,
-      y: pdfY,
+      x: pdfOrigin.x,
+      y: pdfOrigin.y,
       width,
       height,
       opacity,
@@ -316,7 +331,7 @@ async function applyShapeOverlay(
   const strokeWidth: number = data.strokeWidth ?? 2
 
   const strokeRgb = hexToRgb(strokeHex)
-  const pdfY = pageHeight - y - height
+  const pdfOrigin = getPdfOriginForKonvaTopLeft(x, y, height, rotation, pageHeight)
 
   // Only apply fill colour if it's a real colour (not 'transparent' / 'none')
   let fillColor: ReturnType<typeof rgb> | undefined
@@ -327,8 +342,8 @@ async function applyShapeOverlay(
 
   if (shapeType === 'rectangle') {
     page.drawRectangle({
-      x,
-      y: pdfY,
+      x: pdfOrigin.x,
+      y: pdfOrigin.y,
       width,
       height,
       borderColor: rgb(strokeRgb.r, strokeRgb.g, strokeRgb.b),

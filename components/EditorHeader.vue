@@ -163,7 +163,7 @@
           step="1"
           :value="textFormatting.width"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onTextWidthChange"
+          @input="onTextWidthChange"
         >
         <label class="text-xs text-gray-400">H</label>
         <input
@@ -173,7 +173,7 @@
           step="1"
           :value="textFormatting.height"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onTextHeightChange"
+          @input="onTextHeightChange"
         >
         <label class="text-xs text-gray-400">Rotate</label>
         <input
@@ -182,7 +182,7 @@
           step="1"
           :value="textFormatting.rotation"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onTextRotationChange"
+          @input="onTextRotationChange"
         >
       </template>
 
@@ -261,7 +261,7 @@
           step="1"
           :value="shapeFormatting.width"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onShapeWidthChange"
+          @input="onShapeWidthChange"
         >
         <label class="text-xs text-gray-400">H</label>
         <input
@@ -271,7 +271,7 @@
           step="1"
           :value="shapeFormatting.height"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onShapeHeightChange"
+          @input="onShapeHeightChange"
         >
         <label class="text-xs text-gray-400">Rotate</label>
         <input
@@ -280,7 +280,7 @@
           step="1"
           :value="shapeFormatting.rotation"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onShapeRotationChange"
+          @input="onShapeRotationChange"
         >
       </template>
 
@@ -309,7 +309,7 @@
           step="1"
           :value="imageFormatting.width"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onImageWidthChange"
+          @input="onImageWidthChange"
         >
         <label class="text-xs text-gray-400">H</label>
         <input
@@ -319,7 +319,7 @@
           step="1"
           :value="imageFormatting.height"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onImageHeightChange"
+          @input="onImageHeightChange"
         >
         <label class="text-xs text-gray-400">Rotate</label>
         <input
@@ -328,7 +328,7 @@
           step="1"
           :value="imageFormatting.rotation"
           class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
-          @change="onImageRotationChange"
+          @input="onImageRotationChange"
         >
       </template>
 
