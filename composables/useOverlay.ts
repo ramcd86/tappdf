@@ -28,6 +28,9 @@ export const selectedShapeFormattingState = ref<{
   fillColor: string
   shapeType: string
   opacity: number
+  width: number
+  height: number
+  rotation: number
 } | null>(null)
 
 // Reactive page background colour (shown in formatting bar when nothing is selected)
@@ -76,6 +79,62 @@ export function useOverlay() {
     }
   }
 
+  function getLinePointBounds(points: number[]): { minX: number; minY: number; width: number; height: number } {
+    const xs = points.filter((_, index) => index % 2 === 0)
+    const ys = points.filter((_, index) => index % 2 === 1)
+    const minX = Math.min(...xs)
+    const maxX = Math.max(...xs)
+    const minY = Math.min(...ys)
+    const maxY = Math.max(...ys)
+    return {
+      minX,
+      minY,
+      width: maxX - minX,
+      height: maxY - minY,
+    }
+  }
+
+  function getShapeVisualSize(node: Konva.Shape): { width: number; height: number } {
+    if (node instanceof Konva.Ellipse) {
+      return {
+        width: Math.round(node.radiusX() * 2 * node.scaleX()),
+        height: Math.round(node.radiusY() * 2 * node.scaleY()),
+      }
+    }
+    if (node instanceof Konva.Line) {
+      const bounds = getLinePointBounds(node.points())
+      return {
+        width: Math.max(1, Math.round(bounds.width * node.scaleX())),
+        height: Math.max(1, Math.round(bounds.height * node.scaleY())),
+      }
+    }
+    return getVisualSize(node)
+  }
+
+  function resizeLinePoints(node: Konva.Line, width?: number, height?: number) {
+    const points = node.points()
+    const bounds = getLinePointBounds(points)
+    const targetWidth = width !== undefined ? Math.max(1, width) : Math.max(1, bounds.width)
+    const targetHeight = height !== undefined ? Math.max(1, height) : Math.max(1, bounds.height)
+    const scaleX = bounds.width === 0 ? 1 : targetWidth / bounds.width
+    const scaleY = bounds.height === 0 ? 1 : targetHeight / bounds.height
+    const resizedPoints = points.map((point, index) => {
+      if (index % 2 === 0) {
+        return bounds.minX + ((point - bounds.minX) * scaleX)
+      }
+      return bounds.minY + ((point - bounds.minY) * scaleY)
+    })
+
+    if (bounds.width === 0 && width !== undefined && resizedPoints.length >= 2) {
+      resizedPoints[resizedPoints.length - 2] = bounds.minX + targetWidth
+    }
+    if (bounds.height === 0 && height !== undefined && resizedPoints.length >= 2) {
+      resizedPoints[resizedPoints.length - 1] = bounds.minY + targetHeight
+    }
+
+    node.points(resizedPoints)
+  }
+
   function syncFormattingState(node: Konva.Text | null) {
     if (!node) {
       selectedFormatting.value = null
@@ -113,12 +172,16 @@ export function useOverlay() {
     if (node instanceof Konva.Rect) shapeType = 'rectangle'
     else if (node instanceof Konva.Ellipse) shapeType = 'circle'
     else if (node instanceof Konva.Line) shapeType = (node as Konva.Line).closed() ? 'triangle' : 'line'
+    const size = getShapeVisualSize(node)
     selectedShapeFormattingState.value = {
       strokeWidth: node.strokeWidth(),
       strokeColor: (node.stroke() as string) || '#000000',
       fillColor,
       shapeType,
       opacity: node.opacity(),
+      width: size.width,
+      height: size.height,
+      rotation: Math.round(node.rotation()),
     }
   }
 
@@ -836,7 +899,7 @@ export function useOverlay() {
   /**
    * Update stroke/fill properties on the currently selected shape
    */
-  function updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }) {
+  function updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number, width?: number, height?: number, rotation?: number }) {
     if (!transformer) return
     const nodes = transformer.nodes()
     if (nodes.length === 0) return
@@ -849,6 +912,32 @@ export function useOverlay() {
       node.fill(props.fillColor === 'transparent' ? '' : props.fillColor)
     }
     if (props.opacity !== undefined) node.opacity(props.opacity)
+    if (node instanceof Konva.Rect) {
+      if (props.width !== undefined) {
+        node.width(Math.max(1, props.width))
+        node.scaleX(1)
+      }
+      if (props.height !== undefined) {
+        node.height(Math.max(1, props.height))
+        node.scaleY(1)
+      }
+    }
+    else if (node instanceof Konva.Ellipse) {
+      if (props.width !== undefined) {
+        node.radiusX(Math.max(1, props.width) / 2)
+        node.scaleX(1)
+      }
+      if (props.height !== undefined) {
+        node.radiusY(Math.max(1, props.height) / 2)
+        node.scaleY(1)
+      }
+    }
+    else if (node instanceof Konva.Line) {
+      resizeLinePoints(node, props.width, props.height)
+      node.scaleX(1)
+      node.scaleY(1)
+    }
+    if (props.rotation !== undefined) node.rotation(props.rotation)
 
     layer?.draw()
     syncShapeFormattingState(node)

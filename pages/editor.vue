@@ -84,7 +84,7 @@ interface OverlayCanvasRef {
   deleteSelected(): void
   setSelectMode(active: boolean): void
   setPageBackground(color: string): void
-  updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }): void
+  updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number, width?: number, height?: number, rotation?: number }): void
   updateImageFormatting(props: { opacity?: number, width?: number, height?: number, rotation?: number }): void
   toggleTextStyle(style: string): void
   toggleTextDecoration(decoration: string): void
@@ -218,7 +218,7 @@ async function handleDeletePage() {
   }
 }
 
-function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }) {
+function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number, width?: number, height?: number, rotation?: number }) {
   overlayCanvas.value?.updateShapeFormatting(props)
 }
 

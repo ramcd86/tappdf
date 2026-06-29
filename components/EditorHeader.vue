@@ -250,6 +250,38 @@
           @input="onShapeOpacity"
         >
         <span class="text-xs text-gray-500 w-7 text-right">{{ Math.round(shapeFormatting.opacity * 100) }}%</span>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <label class="text-xs text-gray-400">W</label>
+        <input
+          title="Shape width"
+          type="number"
+          min="1"
+          step="1"
+          :value="shapeFormatting.width"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onShapeWidthChange"
+        >
+        <label class="text-xs text-gray-400">H</label>
+        <input
+          title="Shape height"
+          type="number"
+          min="1"
+          step="1"
+          :value="shapeFormatting.height"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onShapeHeightChange"
+        >
+        <label class="text-xs text-gray-400">Rotate</label>
+        <input
+          title="Shape rotation"
+          type="number"
+          step="1"
+          :value="shapeFormatting.rotation"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onShapeRotationChange"
+        >
       </template>
 
       <template v-else-if="imageFormatting">
@@ -362,7 +394,7 @@ const emit = defineEmits<{
   'toggle-text-decoration': [decoration: 'underline' | 'line-through']
   'update-text-formatting': [props: Record<string, unknown>]
   'update-text-color': [color: string]
-  'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }]
+  'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number, width?: number, height?: number, rotation?: number }]
   'update-image-formatting': [props: { opacity?: number, width?: number, height?: number, rotation?: number }]
   'update-page-background': [color: string]
   'bring-forward': []
@@ -425,6 +457,18 @@ function onShapeFillColor(event: Event) {
 
 function onShapeOpacity(event: Event) {
   emit('update-shape-formatting', { opacity: parseInt((event.target as HTMLInputElement).value, 10) / 100 })
+}
+
+function onShapeWidthChange(event: Event) {
+  emit('update-shape-formatting', { width: Math.max(1, parseNumberInput(event, shapeFormatting.value?.width || 1)) })
+}
+
+function onShapeHeightChange(event: Event) {
+  emit('update-shape-formatting', { height: Math.max(1, parseNumberInput(event, shapeFormatting.value?.height || 1)) })
+}
+
+function onShapeRotationChange(event: Event) {
+  emit('update-shape-formatting', { rotation: parseNumberInput(event, shapeFormatting.value?.rotation || 0) })
 }
 
 function onImageOpacity(event: Event) {
