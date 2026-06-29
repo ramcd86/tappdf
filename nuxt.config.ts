@@ -8,6 +8,7 @@ export default defineNuxtConfig({
   modules: [
     '@nuxtjs/tailwindcss',
     '@nuxt/eslint',
+    '@vercel/analytics',
   ],
 
   css: ['~/assets/css/main.css'],
