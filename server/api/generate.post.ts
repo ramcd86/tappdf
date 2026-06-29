@@ -6,6 +6,7 @@
 import { getDocument, updateDocumentFinal } from '~/server/db/client'
 import { getFile, uploadFile } from '~/server/utils/storage'
 import { generatePDFWithOverlays } from '~/server/utils/pdf-generator'
+import { IS_STRIPE_MOCK } from '~/server/utils/stripe'
 import type { OverlayObject } from '~/types/overlay'
 
 interface GenerateRequest {
@@ -45,8 +46,7 @@ export default defineEventHandler(async (event) => {
     // Check payment status
     if (document.payment_status !== 'paid') {
       // For mock mode, we'll allow generation anyway
-      const isMock = !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.startsWith('mock_')
-      if (!isMock) {
+      if (!IS_STRIPE_MOCK) {
         throw createError({
           statusCode: 402,
           message: 'Payment required'

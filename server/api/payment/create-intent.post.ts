@@ -1,4 +1,4 @@
-import { createPaymentIntent } from '~/server/utils/stripe'
+import { createPaymentIntent, IS_STRIPE_MOCK } from '~/server/utils/stripe'
 import { createPayment, getDocument } from '~/server/db/client'
 
 interface CreateIntentRequest {
@@ -38,15 +38,13 @@ export default defineEventHandler(async (event) => {
       paymentIntent.status,
     )
 
-    const IS_MOCK_STRIPE = !process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.startsWith('mock_')
-
     return {
       success: true,
       clientSecret: paymentIntent.client_secret,
       paymentIntentId: paymentIntent.id,
       amount,
       currency,
-      isMock: IS_MOCK_STRIPE,
+      isMock: IS_STRIPE_MOCK,
     }
   }
   catch (error: any) {
