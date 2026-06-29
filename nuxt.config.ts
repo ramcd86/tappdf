@@ -1,3 +1,5 @@
+import { fileURLToPath } from 'node:url'
+
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
   compatibilityDate: '2024-11-01',
@@ -83,6 +85,11 @@ export default defineNuxtConfig({
   },
 
   vite: {
+    resolve: {
+      alias: {
+        '#app-manifest': fileURLToPath(new URL('./app-manifest-shim.ts', import.meta.url)),
+      },
+    },
     optimizeDeps: {
       include: ['pdfjs-dist', 'fabric'],
     },
