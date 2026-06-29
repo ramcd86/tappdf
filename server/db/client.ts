@@ -141,6 +141,36 @@ export async function updateDocumentOverlay(
 }
 
 /**
+ * Update document source PDF path after page structure changes.
+ */
+export async function updateDocumentUpload(
+  id: string,
+  uploadPath: string,
+): Promise<Document | null> {
+  if (IS_MOCK_DB) {
+    const doc = mockDocuments.get(id)
+    if (doc) {
+      doc.upload_path = uploadPath
+      mockDocuments.set(id, doc)
+      await persistMockDB()
+      return doc
+    }
+    return null
+  }
+
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
+    UPDATE documents
+    SET upload_path = ${uploadPath}
+    WHERE id = ${id}
+    RETURNING *
+  `
+
+  return (result[0] as Document | undefined) || null
+}
+
+/**
  * Update document final path and payment status
  */
 export async function updateDocumentFinal(

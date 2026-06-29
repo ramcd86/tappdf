@@ -15,7 +15,7 @@
         <PageNavigator />
         <button
           class="px-3 py-1 text-sm rounded hover:bg-gray-700 disabled:opacity-50 text-gray-300"
-          :disabled="isAddingPage || !documentId"
+          :disabled="isAddingPage || isDeletingPage || !documentId"
           @click="emit('add-page')"
         >
           <span v-if="isAddingPage">Adding...</span>
@@ -23,7 +23,7 @@
         </button>
         <button
           class="px-3 py-1 text-sm rounded text-pink-400 hover:bg-pink-900/20 disabled:opacity-50"
-          :disabled="isDeletingPage || pdf.state.totalPages <= 1 || pdf.state.currentPage === 1 || !documentId"
+          :disabled="isAddingPage || isDeletingPage || pdf.state.totalPages <= 1 || pdf.state.currentPage === 1 || !documentId"
           @click="emit('delete-page')"
         >
           <span v-if="isDeletingPage">Deleting...</span>

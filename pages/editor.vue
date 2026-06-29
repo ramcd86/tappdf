@@ -114,6 +114,11 @@ function handlePDFLoaded(dimensions: { width: number, height: number, scale: num
   pdfScale.value = dimensions.scale
 }
 
+function withCacheBust(url: string): string {
+  const separator = url.includes('?') ? '&' : '?'
+  return `${url}${separator}t=${Date.now()}`
+}
+
 // When the PDF page changes, switch the overlay canvas to show only that page's elements
 watch(() => pdf.state.currentPage, (newPage) => {
   if (newPage <= 0 || !overlayCanvas.value) return
@@ -167,13 +172,12 @@ function handleSelectMode(active: boolean) {
 }
 
 async function handleAddPage() {
-  if (!documentId) return
+  if (!documentId || isAddingPage.value || isDeletingPage.value) return
   isAddingPage.value = true
   try {
-    const result = await $fetch<{ pageCount: number }>(`/api/document/${documentId}/add-page`, { method: 'POST' })
-    if (result.pageCount && pdf.state.url) {
-      // Reload PDF with cache-bust then navigate to the new last page
-      await pdf.loadPDF(pdf.state.url + '?t=' + Date.now())
+    const result = await $fetch<{ pageCount: number, uploadUrl: string }>(`/api/document/${documentId}/add-page`, { method: 'POST' })
+    if (result.pageCount && result.uploadUrl) {
+      await pdf.loadPDF(withCacheBust(result.uploadUrl))
       pdf.goToPage(result.pageCount)
     }
   }
@@ -186,18 +190,18 @@ async function handleAddPage() {
 }
 
 async function handleDeletePage() {
-  if (!documentId || pdf.state.totalPages <= 1) return
+  if (!documentId || pdf.state.totalPages <= 1 || isAddingPage.value || isDeletingPage.value) return
   isDeletingPage.value = true
   try {
     const pageIndex = pdf.state.currentPage - 1 // convert to 0-based
     overlayCanvas.value?.deletePageOverlays(pageIndex)
-    const result = await $fetch<{ pageCount: number }>(`/api/document/${documentId}/delete-page`, {
+    const result = await $fetch<{ pageCount: number, uploadUrl: string }>(`/api/document/${documentId}/delete-page`, {
       method: 'POST',
       body: { pageIndex },
     })
-    if (result.pageCount && pdf.state.url) {
+    if (result.pageCount && result.uploadUrl) {
       const targetPage = Math.min(pdf.state.currentPage, result.pageCount)
-      await pdf.loadPDF(pdf.state.url + '?t=' + Date.now())
+      await pdf.loadPDF(withCacheBust(result.uploadUrl))
       pdf.goToPage(targetPage)
       // Explicitly switch the overlay canvas to the target page — necessary when
       // currentPage doesn't change value (e.g. deleting page 2 while on page 1)

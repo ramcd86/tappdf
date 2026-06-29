@@ -5,8 +5,8 @@
  */
 
 import { PDFDocument } from 'pdf-lib'
-import { getDocument } from '~/server/db/client'
-import { getFile, uploadFile } from '~/server/utils/storage'
+import { getDocument, updateDocumentUpload } from '~/server/db/client'
+import { getFile, toAppStorageUrl, uploadFile } from '~/server/utils/storage'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -38,8 +38,12 @@ export default defineEventHandler(async (event) => {
   pdfDoc.removePage(body.pageIndex)
 
   const newBytes = await pdfDoc.save()
-  const filename = document.upload_path.replace(/^\/api\/storage\//, '')
-  await uploadFile(Buffer.from(newBytes), filename, { contentType: 'application/pdf' })
+  const filename = `document-${id}-${Date.now()}-pages-${pdfDoc.getPageCount()}.pdf`
+  const uploadResult = await uploadFile(Buffer.from(newBytes), filename, { contentType: 'application/pdf' })
+  await updateDocumentUpload(id, uploadResult.pathname)
 
-  return { pageCount: pdfDoc.getPageCount() }
+  return {
+    pageCount: pdfDoc.getPageCount(),
+    uploadUrl: toAppStorageUrl(uploadResult.pathname),
+  }
 })

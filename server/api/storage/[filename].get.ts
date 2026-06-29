@@ -45,6 +45,9 @@ export default defineEventHandler(async (event) => {
     
     setResponseHeader(event, 'Content-Type', contentType)
     setResponseHeader(event, 'Content-Disposition', `inline; filename="${filename}"`)
+    setResponseHeader(event, 'Cache-Control', 'no-store, max-age=0')
+    setResponseHeader(event, 'Pragma', 'no-cache')
+    setResponseHeader(event, 'Expires', '0')
     
     return fileBuffer
   } catch (error: any) {
