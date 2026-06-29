@@ -2,18 +2,25 @@
  * Database client with in-memory mock for local development
  */
 
-import { sql } from '@vercel/postgres'
 import { promises as fs } from 'fs'
 import path from 'path'
 import { nanoid } from 'nanoid'
 import type { Document, Payment } from './schema'
-import { IS_MOCK_DB } from './schema'
+import { initializeSchema } from './schema'
+import { getSql, IS_MOCK_DB } from './sql'
 
 // In-memory storage for mock mode
 const mockDocuments = new Map<string, Document>()
 const mockPayments = new Map<string, Payment>()
 
 const MOCK_DB_FILE = path.join(process.cwd(), '.storage', 'mock-db.json')
+let schemaReady: Promise<void> | null = null
+
+async function ensureSchema(): Promise<void> {
+  if (IS_MOCK_DB) return
+  schemaReady ||= initializeSchema()
+  await schemaReady
+}
 
 async function persistMockDB() {
   if (!IS_MOCK_DB) return
@@ -75,13 +82,15 @@ export async function createDocument(data: {
     return doc
   }
 
-  const result = await sql<Document>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     INSERT INTO documents (upload_path, overlay_path, final_path, payment_status, expires_at)
-    VALUES (${data.uploadPath}, ${data.overlayPath}, ${data.finalPath}, ${data.paymentStatus || 'pending'}, ${data.expiresAt.toISOString()})
+    VALUES (${data.uploadPath}, ${data.overlayPath ?? null}, ${data.finalPath ?? null}, ${data.paymentStatus || 'pending'}, ${data.expiresAt.toISOString()})
     RETURNING *
   `
   
-  return result.rows[0]
+  return result[0] as Document
 }
 
 /**
@@ -92,11 +101,13 @@ export async function getDocument(id: string): Promise<Document | null> {
     return mockDocuments.get(id) || null
   }
 
-  const result = await sql<Document>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     SELECT * FROM documents WHERE id = ${id}
   `
   
-  return result.rows[0] || null
+  return (result[0] as Document | undefined) || null
 }
 
 /**
@@ -117,14 +128,16 @@ export async function updateDocumentOverlay(
     return null
   }
 
-  const result = await sql<Document>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     UPDATE documents
     SET overlay_path = ${overlayPath}
     WHERE id = ${id}
     RETURNING *
   `
   
-  return result.rows[0] || null
+  return (result[0] as Document | undefined) || null
 }
 
 /**
@@ -147,14 +160,16 @@ export async function updateDocumentFinal(
     return null
   }
 
-  const result = await sql<Document>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     UPDATE documents
     SET final_path = ${finalPath}, payment_status = ${paymentStatus}
     WHERE id = ${id}
     RETURNING *
   `
   
-  return result.rows[0] || null
+  return (result[0] as Document | undefined) || null
 }
 
 /**
@@ -174,12 +189,14 @@ export async function deleteExpiredDocuments(): Promise<number> {
     return count
   }
 
+  await ensureSchema()
+  const sql = getSql()
   const result = await sql`
     DELETE FROM documents
     WHERE expires_at < NOW()
   `
   
-  return result.rowCount || 0
+  return result.count || 0
 }
 
 /**
@@ -207,13 +224,15 @@ export async function createPayment(
     return payment
   }
 
-  const result = await sql<Payment>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     INSERT INTO payments (stripe_intent_id, document_id, amount, currency, status)
     VALUES (${stripeIntentId}, ${documentId}, ${amount}, ${currency}, ${status})
     RETURNING *
   `
   
-  return result.rows[0]
+  return result[0] as Payment
 }
 
 /**
@@ -229,11 +248,13 @@ export async function getPaymentByIntent(stripeIntentId: string): Promise<Paymen
     return null
   }
 
-  const result = await sql<Payment>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     SELECT * FROM payments WHERE stripe_intent_id = ${stripeIntentId}
   `
   
-  return result.rows[0] || null
+  return (result[0] as Payment | undefined) || null
 }
 
 /**
@@ -255,14 +276,16 @@ export async function updatePaymentStatus(
     return null
   }
 
-  const result = await sql<Payment>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     UPDATE payments
     SET status = ${status}
     WHERE stripe_intent_id = ${stripeIntentId}
     RETURNING *
   `
   
-  return result.rows[0] || null
+  return (result[0] as Payment | undefined) || null
 }
 
 /**
@@ -273,11 +296,13 @@ export async function getAllDocuments(): Promise<Document[]> {
     return Array.from(mockDocuments.values())
   }
 
-  const result = await sql<Document>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     SELECT * FROM documents ORDER BY created_at DESC
   `
   
-  return result.rows
+  return [...result] as Document[]
 }
 
 /**
@@ -288,9 +313,11 @@ export async function getAllPayments(): Promise<Payment[]> {
     return Array.from(mockPayments.values())
   }
 
-  const result = await sql<Payment>`
+  await ensureSchema()
+  const sql = getSql()
+  const result = await sql`
     SELECT * FROM payments ORDER BY created_at DESC
   `
   
-  return result.rows
+  return [...result] as Payment[]
 }

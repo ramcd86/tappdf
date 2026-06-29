@@ -3,9 +3,7 @@
  * Supports both Vercel Postgres and in-memory mock for local development
  */
 
-import { sql } from '@vercel/postgres'
-
-const IS_MOCK_DB = !process.env.POSTGRES_URL
+import { getSql, IS_MOCK_DB } from './sql'
 
 export interface Document {
   id: string
@@ -37,6 +35,8 @@ export async function initializeSchema() {
   }
 
   try {
+    const sql = getSql()
+
     // Create documents table
     await sql`
       CREATE TABLE IF NOT EXISTS documents (
