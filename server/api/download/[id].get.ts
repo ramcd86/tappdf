@@ -56,7 +56,7 @@ export default defineEventHandler(async (event) => {
     const filename = `tappdf-${documentId}.pdf`
     setResponseHeader(event, 'Content-Type', 'application/pdf')
     setResponseHeader(event, 'Content-Disposition', `attachment; filename="${filename}"`)
-    setResponseHeader(event, 'Content-Length', fileBuffer.length.toString())
+    setResponseHeader(event, 'Content-Length', fileBuffer.length)
     
     return fileBuffer
   } catch (error: any) {

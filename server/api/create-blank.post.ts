@@ -37,14 +37,14 @@ export default defineEventHandler(async (event) => {
     const filename = `blank-${nanoid()}.pdf`
 
     // Upload to storage
-    const { url } = await uploadFile(buffer, filename, { contentType: 'application/pdf' })
+    const uploadResult = await uploadFile(buffer, filename, { contentType: 'application/pdf' })
 
     // Create document record
     const expiresAt = new Date()
     expiresAt.setHours(expiresAt.getHours() + 24)
 
     const document = await createDocument({
-      uploadPath: url,
+      uploadPath: uploadResult.pathname,
       overlayPath: null,
       finalPath: null,
       paymentStatus: 'pending',
@@ -55,7 +55,7 @@ export default defineEventHandler(async (event) => {
 
     return {
       documentId: document.id,
-      uploadUrl: url,
+      uploadUrl: uploadResult.url,
       pages,
       expiresAt: document.expires_at.toISOString(),
     }

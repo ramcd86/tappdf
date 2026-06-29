@@ -5,11 +5,42 @@
 
 import { promises as fs } from 'fs'
 import path from 'path'
-import { del, head, list, put } from '@vercel/blob'
+import { del, get, head, list, put } from '@vercel/blob'
 import { nanoid } from 'nanoid'
 
 const IS_LOCAL = process.env.NODE_ENV === 'development' && !process.env.BLOB_READ_WRITE_TOKEN
 const LOCAL_STORAGE_DIR = path.join(process.cwd(), '.storage')
+
+function normalizePathname(pathname: string): string {
+  if (pathname.startsWith('/api/storage/')) {
+    return pathname.replace(/^\/api\/storage\//, '')
+  }
+
+  try {
+    const url = new URL(pathname)
+    return url.pathname.replace(/^\/+/, '')
+  }
+  catch {
+    return pathname.replace(/^\/+/, '')
+  }
+}
+
+function toAppStorageUrl(pathname: string): string {
+  return `/api/storage/${normalizePathname(pathname)}`
+}
+
+async function streamToBuffer(stream: ReadableStream<Uint8Array>): Promise<Buffer> {
+  const reader = stream.getReader()
+  const chunks: Uint8Array[] = []
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+  }
+
+  return Buffer.concat(chunks)
+}
 
 /**
  * Initialize local storage directory if in local mode
@@ -52,10 +83,11 @@ export async function uploadFile(
   options?: { contentType?: string },
 ): Promise<UploadResult> {
   const uniqueFilename = filename || `${nanoid()}.pdf`
+  const pathname = normalizePathname(uniqueFilename)
   
   if (IS_LOCAL) {
     // Local filesystem mock
-    const filepath = path.join(LOCAL_STORAGE_DIR, uniqueFilename)
+    const filepath = path.join(LOCAL_STORAGE_DIR, pathname)
     
     let buffer: Buffer
     if (file instanceof Buffer) {
@@ -69,8 +101,8 @@ export async function uploadFile(
     await fs.writeFile(filepath, buffer)
     
     return {
-      url: `/api/storage/${uniqueFilename}`,
-      pathname: uniqueFilename,
+      url: toAppStorageUrl(pathname),
+      pathname,
       contentType: options?.contentType || 'application/pdf',
       size: buffer.length,
     }
@@ -78,15 +110,23 @@ export async function uploadFile(
  
   else {
     // Vercel Blob
-    const arrayBuffer = file instanceof Buffer ? file : await (file as Blob).arrayBuffer()
-    const buffer = Buffer.from(arrayBuffer)
-    const blob = await put(uniqueFilename, buffer, {
-      access: 'public',
+    let buffer: Buffer
+    if (file instanceof Buffer) {
+      buffer = file
+    }
+    else {
+      const arrayBuffer = await (file as Blob).arrayBuffer()
+      buffer = Buffer.from(arrayBuffer)
+    }
+
+    const blob = await put(pathname, buffer, {
+      access: 'private',
+      allowOverwrite: true,
       contentType: options?.contentType || 'application/pdf',
     })
     
     return {
-      url: blob.url,
+      url: toAppStorageUrl(blob.pathname),
       pathname: blob.pathname,
       contentType: blob.contentType || options?.contentType || 'application/pdf',
       size: buffer.length,
@@ -98,8 +138,10 @@ export async function uploadFile(
  * Delete a file from storage
  */
 export async function deleteFile(pathname: string): Promise<void> {
+  const normalizedPathname = normalizePathname(pathname)
+
   if (IS_LOCAL) {
-    const filepath = path.join(LOCAL_STORAGE_DIR, pathname)
+    const filepath = path.join(LOCAL_STORAGE_DIR, normalizedPathname)
     try {
       await fs.unlink(filepath)
     }
@@ -108,7 +150,7 @@ export async function deleteFile(pathname: string): Promise<void> {
     }
   }
   else {
-    await del(pathname)
+    await del(normalizedPathname)
   }
 }
 
@@ -116,18 +158,19 @@ export async function deleteFile(pathname: string): Promise<void> {
  * Get file from storage
  */
 export async function getFile(pathname: string): Promise<Buffer> {
+  const normalizedPathname = normalizePathname(pathname)
+
   if (IS_LOCAL) {
-    // Normalize: strip leading /api/storage/ URL prefix if present
-    const filename = pathname.replace(/^\/api\/storage\//, '')
-    const filepath = path.join(LOCAL_STORAGE_DIR, filename)
+    const filepath = path.join(LOCAL_STORAGE_DIR, normalizedPathname)
     return await fs.readFile(filepath)
   }
   else {
-    const response = await fetch(`https://blob.vercel-storage.com/${pathname}`)
-    if (!response.ok) {
-      throw new Error(`Failed to fetch file: ${response.statusText}`)
+    const result = await get(normalizedPathname, { access: 'private' })
+    if (!result || result.statusCode !== 200 || !result.stream) {
+      throw new Error(`Failed to fetch file: ${normalizedPathname}`)
     }
-    return Buffer.from(await response.arrayBuffer())
+
+    return streamToBuffer(result.stream)
   }
 }
 
@@ -135,8 +178,10 @@ export async function getFile(pathname: string): Promise<Buffer> {
  * Check if file exists
  */
 export async function fileExists(pathname: string): Promise<boolean> {
+  const normalizedPathname = normalizePathname(pathname)
+
   if (IS_LOCAL) {
-    const filepath = path.join(LOCAL_STORAGE_DIR, pathname)
+    const filepath = path.join(LOCAL_STORAGE_DIR, normalizedPathname)
     try {
       await fs.access(filepath)
       return true
@@ -147,7 +192,7 @@ export async function fileExists(pathname: string): Promise<boolean> {
   }
   else {
     try {
-      await head(pathname)
+      await head(normalizedPathname)
       return true
     }
     catch {
@@ -169,7 +214,7 @@ export async function listFiles(): Promise<FileMetadata[]> {
         const filepath = path.join(LOCAL_STORAGE_DIR, file)
         const stats = await fs.stat(filepath)
         metadata.push({
-          url: `/api/storage/${file}`,
+          url: toAppStorageUrl(file),
           pathname: file,
           size: stats.size,
           uploadedAt: stats.birthtime,
@@ -185,7 +230,7 @@ export async function listFiles(): Promise<FileMetadata[]> {
   else {
     const { blobs } = await list()
     return blobs.map(blob => ({
-      url: blob.url,
+      url: toAppStorageUrl(blob.pathname),
       pathname: blob.pathname,
       size: blob.size,
       uploadedAt: blob.uploadedAt,
@@ -197,13 +242,7 @@ export async function listFiles(): Promise<FileMetadata[]> {
  * Generate a signed download URL (for local mode, just return the path)
  */
 export async function getDownloadUrl(pathname: string, _expiresIn: number = 3600): Promise<string> {
-  if (IS_LOCAL) {
-    return `/api/storage/${pathname}`
-  }
-  else {
-    // For Vercel Blob, URLs are already public, but you could implement signed URLs if needed
-    return `https://blob.vercel-storage.com/${pathname}`
-  }
+  return toAppStorageUrl(pathname)
 }
 
-export { IS_LOCAL, LOCAL_STORAGE_DIR }
+export { IS_LOCAL, LOCAL_STORAGE_DIR, normalizePathname, toAppStorageUrl }

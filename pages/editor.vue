@@ -13,7 +13,7 @@
       @update-text-formatting="handleUpdateTextFormatting"
       @update-text-color="(color: string) => overlayCanvas?.updateTextColor(color)"
       @update-shape-formatting="handleUpdateShapeFormatting"
-      @update-image-formatting="(props: { opacity: number }) => overlayCanvas?.updateImageFormatting(props)"
+      @update-image-formatting="handleUpdateImageFormatting"
       @update-page-background="(color: string) => overlayCanvas?.setPageBackground(color)"
       @bring-forward="() => overlayCanvas?.bringForward()"
       @send-backward="() => overlayCanvas?.sendBackward()"
@@ -216,6 +216,10 @@ async function handleDeletePage() {
 
 function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }) {
   overlayCanvas.value?.updateShapeFormatting(props)
+}
+
+function handleUpdateImageFormatting(props: { opacity: number }) {
+  overlayCanvas.value?.updateImageFormatting(props)
 }
 
 async function handleDownload() {

@@ -4,6 +4,7 @@
  */
 
 import { getDocument } from '~/server/db/client'
+import { toAppStorageUrl } from '~/server/utils/storage'
 
 export default defineEventHandler(async (event) => {
   const id = getRouterParam(event, 'id')
@@ -32,9 +33,9 @@ export default defineEventHandler(async (event) => {
     // Return document info with file URL
     return {
       id: document.id,
-      uploadUrl: document.upload_path,
-      overlayUrl: document.overlay_path,
-      finalUrl: document.final_path,
+      uploadUrl: toAppStorageUrl(document.upload_path),
+      overlayUrl: document.overlay_path ? toAppStorageUrl(document.overlay_path) : null,
+      finalUrl: document.final_path ? toAppStorageUrl(document.final_path) : null,
       paymentStatus: document.payment_status,
       createdAt: document.created_at,
       expiresAt: document.expires_at,

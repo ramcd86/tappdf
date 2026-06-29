@@ -1,20 +1,12 @@
 /**
- * Local storage file serving endpoint (for development only)
- * GET /api/storage/[filename]
+ * Storage file serving endpoint.
+ * Local dev reads from .storage; production streams private Vercel Blob files
+ * through the app so browsers never need direct Blob access.
  */
 
-import { promises as fs } from 'fs'
-import path from 'path'
-import { IS_LOCAL, LOCAL_STORAGE_DIR } from '~/server/utils/storage'
+import { fileExists, getFile, normalizePathname } from '~/server/utils/storage'
 
 export default defineEventHandler(async (event) => {
-  if (!IS_LOCAL) {
-    throw createError({
-      statusCode: 404,
-      message: 'This endpoint is only available in local development mode'
-    })
-  }
-
   const filename = getRouterParam(event, 'filename')
   
   if (!filename) {
@@ -32,21 +24,32 @@ export default defineEventHandler(async (event) => {
     })
   }
 
-  const filepath = path.join(LOCAL_STORAGE_DIR, filename)
+  const pathname = normalizePathname(filename)
 
   try {
-    // Check if file exists
-    await fs.access(filepath)
+    if (!(await fileExists(pathname))) {
+      throw createError({
+        statusCode: 404,
+        message: 'File not found'
+      })
+    }
     
-    // Read file
-    const fileBuffer = await fs.readFile(filepath)
+    const fileBuffer = await getFile(pathname)
+    const contentType = pathname.endsWith('.json')
+      ? 'application/json'
+      : pathname.endsWith('.png')
+        ? 'image/png'
+        : pathname.endsWith('.jpg') || pathname.endsWith('.jpeg')
+          ? 'image/jpeg'
+          : 'application/pdf'
     
-    // Set appropriate headers
-    setResponseHeader(event, 'Content-Type', 'application/pdf')
+    setResponseHeader(event, 'Content-Type', contentType)
     setResponseHeader(event, 'Content-Disposition', `inline; filename="${filename}"`)
     
     return fileBuffer
-  } catch (error) {
+  } catch (error: any) {
+    if (error.statusCode) throw error
+
     throw createError({
       statusCode: 404,
       message: 'File not found'
