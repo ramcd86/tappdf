@@ -152,6 +152,38 @@
           class="w-10 h-8 border border-gray-600 rounded cursor-pointer bg-gray-700"
           @input="onColorChange"
         >
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <label class="text-xs text-gray-400">W</label>
+        <input
+          title="Text width"
+          type="number"
+          min="1"
+          step="1"
+          :value="textFormatting.width"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onTextWidthChange"
+        >
+        <label class="text-xs text-gray-400">H</label>
+        <input
+          title="Text height"
+          type="number"
+          min="1"
+          step="1"
+          :value="textFormatting.height"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onTextHeightChange"
+        >
+        <label class="text-xs text-gray-400">Rotate</label>
+        <input
+          title="Text rotation"
+          type="number"
+          step="1"
+          :value="textFormatting.rotation"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onTextRotationChange"
+        >
       </template>
 
       <template v-else-if="shapeFormatting">
@@ -234,6 +266,38 @@
           @input="onImageOpacity"
         >
         <span class="text-xs text-gray-500 w-7 text-right">{{ Math.round(imageFormatting.opacity * 100) }}%</span>
+
+        <div class="w-px h-6 bg-gray-600" />
+
+        <label class="text-xs text-gray-400">W</label>
+        <input
+          title="Image width"
+          type="number"
+          min="1"
+          step="1"
+          :value="imageFormatting.width"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onImageWidthChange"
+        >
+        <label class="text-xs text-gray-400">H</label>
+        <input
+          title="Image height"
+          type="number"
+          min="1"
+          step="1"
+          :value="imageFormatting.height"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onImageHeightChange"
+        >
+        <label class="text-xs text-gray-400">Rotate</label>
+        <input
+          title="Image rotation"
+          type="number"
+          step="1"
+          :value="imageFormatting.rotation"
+          class="w-16 px-2 py-1 text-sm border border-gray-600 rounded bg-gray-700 text-gray-200"
+          @change="onImageRotationChange"
+        >
       </template>
 
       <span
@@ -299,7 +363,7 @@ const emit = defineEmits<{
   'update-text-formatting': [props: Record<string, unknown>]
   'update-text-color': [color: string]
   'update-shape-formatting': [props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }]
-  'update-image-formatting': [props: { opacity: number }]
+  'update-image-formatting': [props: { opacity?: number, width?: number, height?: number, rotation?: number }]
   'update-page-background': [color: string]
   'bring-forward': []
   'send-backward': []
@@ -314,6 +378,11 @@ const pageBackground = currentPageBackgroundState
 const fontFamilies = ['Arial', 'Helvetica', 'Times New Roman', 'Georgia', 'Courier New', 'Verdana', 'Tahoma', 'Trebuchet MS', 'Comic Sans MS', 'Impact']
 const fontSizes = [8, 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 48, 64, 72, 96]
 
+function parseNumberInput(event: Event, fallback: number): number {
+  const value = Number((event.target as HTMLInputElement).value)
+  return Number.isFinite(value) ? value : fallback
+}
+
 function onFontChange(event: Event) {
   emit('update-text-formatting', { fontFamily: (event.target as HTMLSelectElement).value })
 }
@@ -324,6 +393,18 @@ function onFontSizeChange(event: Event) {
 
 function onColorChange(event: Event) {
   emit('update-text-color', (event.target as HTMLInputElement).value)
+}
+
+function onTextWidthChange(event: Event) {
+  emit('update-text-formatting', { width: Math.max(1, parseNumberInput(event, textFormatting.value?.width || 1)) })
+}
+
+function onTextHeightChange(event: Event) {
+  emit('update-text-formatting', { height: Math.max(1, parseNumberInput(event, textFormatting.value?.height || 1)) })
+}
+
+function onTextRotationChange(event: Event) {
+  emit('update-text-formatting', { rotation: parseNumberInput(event, textFormatting.value?.rotation || 0) })
 }
 
 function onShapeStrokeColor(event: Event) {
@@ -348,6 +429,18 @@ function onShapeOpacity(event: Event) {
 
 function onImageOpacity(event: Event) {
   emit('update-image-formatting', { opacity: parseInt((event.target as HTMLInputElement).value, 10) / 100 })
+}
+
+function onImageWidthChange(event: Event) {
+  emit('update-image-formatting', { width: Math.max(1, parseNumberInput(event, imageFormatting.value?.width || 1)) })
+}
+
+function onImageHeightChange(event: Event) {
+  emit('update-image-formatting', { height: Math.max(1, parseNumberInput(event, imageFormatting.value?.height || 1)) })
+}
+
+function onImageRotationChange(event: Event) {
+  emit('update-image-formatting', { rotation: parseNumberInput(event, imageFormatting.value?.rotation || 0) })
 }
 
 function onPageBackgroundChange(event: Event) {

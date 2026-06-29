@@ -85,7 +85,7 @@ interface OverlayCanvasRef {
   setSelectMode(active: boolean): void
   setPageBackground(color: string): void
   updateShapeFormatting(props: { strokeWidth?: number, strokeColor?: string, fillColor?: string, opacity?: number }): void
-  updateImageFormatting(props: { opacity: number }): void
+  updateImageFormatting(props: { opacity?: number, width?: number, height?: number, rotation?: number }): void
   toggleTextStyle(style: string): void
   toggleTextDecoration(decoration: string): void
   updateTextFormatting(props: Record<string, unknown>): void
@@ -222,7 +222,7 @@ function handleUpdateShapeFormatting(props: { strokeWidth?: number, strokeColor?
   overlayCanvas.value?.updateShapeFormatting(props)
 }
 
-function handleUpdateImageFormatting(props: { opacity: number }) {
+function handleUpdateImageFormatting(props: { opacity?: number, width?: number, height?: number, rotation?: number }) {
   overlayCanvas.value?.updateImageFormatting(props)
 }
 

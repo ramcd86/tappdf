@@ -10,21 +10,21 @@ export default defineEventHandler(async (event) => {
   try {
     // Parse multipart form data
     const formData = await readMultipartFormData(event)
-    
+
     if (!formData || formData.length === 0) {
       throw createError({
         statusCode: 400,
-        message: 'No file provided'
+        message: 'No file provided',
       })
     }
 
     // Get the uploaded file
     const file = formData.find(item => item.name === 'file')
-    
+
     if (!file || !file.data) {
       throw createError({
         statusCode: 400,
-        message: 'Invalid file upload'
+        message: 'Invalid file upload',
       })
     }
 
@@ -33,7 +33,7 @@ export default defineEventHandler(async (event) => {
     if (!contentType.includes('pdf')) {
       throw createError({
         statusCode: 400,
-        message: 'Only PDF files are allowed'
+        message: 'Only PDF files are allowed',
       })
     }
 
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
     if (file.data.length > maxSize) {
       throw createError({
         statusCode: 400,
-        message: 'File size exceeds 10MB limit'
+        message: 'File size exceeds 10MB limit',
       })
     }
 
@@ -54,7 +54,7 @@ export default defineEventHandler(async (event) => {
     const uploadResult = await uploadFile(
       file.data,
       filename,
-      { contentType: 'application/pdf' }
+      { contentType: 'application/pdf' },
     )
 
     // Calculate expiry time (24 hours from now)
@@ -64,7 +64,7 @@ export default defineEventHandler(async (event) => {
     // Create document record in database
     const document = await createDocument({
       uploadPath: uploadResult.pathname,
-      expiresAt
+      expiresAt,
     })
 
     // Return response
@@ -73,18 +73,19 @@ export default defineEventHandler(async (event) => {
       documentId: document.id,
       uploadUrl: uploadResult.url,
       expiresAt: document.expires_at.toISOString(),
-      size: uploadResult.size
+      size: uploadResult.size,
     }
-  } catch (error: any) {
+  }
+  catch (error: any) {
     console.error('Upload error:', error)
-    
+
     if (error.statusCode) {
       throw error
     }
-    
+
     throw createError({
       statusCode: 500,
-      message: 'Failed to upload file'
+      message: 'Failed to upload file',
     })
   }
 })

@@ -17,6 +17,9 @@ export const selectedFormattingState = ref<{
   align: string
   fontSize: number
   color: string
+  width: number
+  height: number
+  rotation: number
 } | null>(null)
 
 export const selectedShapeFormattingState = ref<{
@@ -33,8 +36,13 @@ export const currentPageBackgroundState = ref<string>('#ffffff')
 // True whenever any canvas object is selected (text, shape, image, highlight)
 export const hasSelectionState = ref(false)
 
-// Reactive image formatting state (opacity)
-export const selectedImageFormattingState = ref<{ opacity: number } | null>(null)
+// Reactive image formatting state
+export const selectedImageFormattingState = ref<{
+  opacity: number
+  width: number
+  height: number
+  rotation: number
+} | null>(null)
 
 export function useOverlay() {
   const state = reactive<OverlayState>({
@@ -61,6 +69,13 @@ export function useOverlay() {
   // Reactive formatting state — updated synchronously by Konva events (replaces polling)
   const selectedFormatting = selectedFormattingState
 
+  function getVisualSize(node: Konva.Node): { width: number; height: number } {
+    return {
+      width: Math.round(node.width() * node.scaleX()),
+      height: Math.round(node.height() * node.scaleY()),
+    }
+  }
+
   function syncFormattingState(node: Konva.Text | null) {
     if (!node) {
       selectedFormatting.value = null
@@ -69,6 +84,7 @@ export function useOverlay() {
     const fontStyle = node.fontStyle() || ''
     const textDecoration = node.textDecoration() || ''
     const fill = node.fill()
+    const size = getVisualSize(node)
     selectedFormatting.value = {
       isBold: fontStyle.includes('bold'),
       isItalic: fontStyle.includes('italic'),
@@ -78,6 +94,9 @@ export function useOverlay() {
       align: node.align() || 'left',
       fontSize: node.fontSize(),
       color: typeof fill === 'string' ? fill : '#000000',
+      width: size.width,
+      height: size.height,
+      rotation: Math.round(node.rotation()),
     }
   }
 
@@ -108,7 +127,13 @@ export function useOverlay() {
       selectedImageFormattingState.value = null
       return
     }
-    selectedImageFormattingState.value = { opacity: node.opacity() }
+    const size = getVisualSize(node)
+    selectedImageFormattingState.value = {
+      opacity: node.opacity(),
+      width: size.width,
+      height: size.height,
+      rotation: Math.round(node.rotation()),
+    }
   }
 
   /**
@@ -191,6 +216,15 @@ export function useOverlay() {
         node.scaleY(1)
 
         layer?.draw()
+        syncFormattingState(node)
+      }
+      else if (node instanceof Konva.Image) {
+        node.width(node.width() * node.scaleX())
+        node.height(node.height() * node.scaleY())
+        node.scaleX(1)
+        node.scaleY(1)
+        layer?.draw()
+        syncImageFormattingState(node)
       }
       else if (node instanceof Konva.Rect) {
         // Bake scale into width/height so the shape stays pixel-perfect
@@ -224,14 +258,13 @@ export function useOverlay() {
 
     // Keyboard shortcuts - Delete/Backspace to delete selected object
     keyboardHandler = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+        return
+      }
+
       // Check if Delete or Backspace was pressed
       if (e.key === 'Delete' || e.key === 'Backspace') {
-        // Don't delete if user is typing in an input/textarea
-        const target = e.target as HTMLElement
-        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-          return
-        }
-
         // Check if there's a selected object
         const selectedNodes = transformer?.nodes() || []
         if (selectedNodes.length > 0) {
@@ -239,6 +272,29 @@ export function useOverlay() {
           deleteSelected()
         }
       }
+
+      const arrowDelta: Record<string, { x: number; y: number }> = {
+        ArrowUp: { x: 0, y: -1 },
+        ArrowDown: { x: 0, y: 1 },
+        ArrowLeft: { x: -1, y: 0 },
+        ArrowRight: { x: 1, y: 0 },
+      }
+      const delta = arrowDelta[e.key]
+      if (!delta) return
+
+      const selectedNodes = transformer?.nodes() || []
+      const node = selectedNodes[0]
+      const isNudgeable = node instanceof Konva.Image
+        || node instanceof Konva.Rect
+        || node instanceof Konva.Ellipse
+        || node instanceof Konva.Line
+      if (!node || !isNudgeable) return
+
+      e.preventDefault()
+      node.x(node.x() + delta.x)
+      node.y(node.y() + delta.y)
+      layer?.batchDraw()
+      saveOverlays()
     }
 
     // Add keyboard listener
@@ -431,9 +487,10 @@ export function useOverlay() {
           ...options,
         })
 
+        const hasExplicitSize = options?.width !== undefined || options?.height !== undefined
         const maxWidth = stage!.width() * 0.5
         const maxHeight = stage!.height() * 0.5
-        if (image.width() > maxWidth || image.height() > maxHeight) {
+        if (!hasExplicitSize && (image.width() > maxWidth || image.height() > maxHeight)) {
           const scale = Math.min(maxWidth / image.width(), maxHeight / image.height())
           image.scale({ x: scale, y: scale })
         }
@@ -623,6 +680,9 @@ export function useOverlay() {
     fontFamily?: string
     align?: string
     fontSize?: number
+    width?: number
+    height?: number
+    rotation?: number
   }) {
     const textNode = getSelectedTextNode()
     if (!textNode) return
@@ -644,6 +704,9 @@ export function useOverlay() {
         activeTextarea.style.minHeight = `${properties.fontSize * 1.3}px`
       }
     }
+    if (properties.width !== undefined) textNode.width(Math.max(1, properties.width))
+    if (properties.height !== undefined) textNode.height(Math.max(1, properties.height))
+    if (properties.rotation !== undefined) textNode.rotation(properties.rotation)
 
     layer?.draw()
     syncFormattingState(textNode)
@@ -722,6 +785,7 @@ export function useOverlay() {
     const fontStyle = textNode.fontStyle() || ''
     const textDecoration = textNode.textDecoration() || ''
     const fillColor = textNode.fill()
+    const size = getVisualSize(textNode)
 
     const state = {
       isBold: fontStyle.includes('bold'),
@@ -732,6 +796,9 @@ export function useOverlay() {
       align: textNode.align(),
       fontSize: textNode.fontSize(),
       color: fillColor,
+      width: size.width,
+      height: size.height,
+      rotation: Math.round(textNode.rotation()),
     }
 
     return state
@@ -858,7 +925,7 @@ export function useOverlay() {
     }
   }
 
-  function updateImageFormatting(props: { opacity?: number }) {
+  function updateImageFormatting(props: { opacity?: number; width?: number; height?: number; rotation?: number }) {
     if (!transformer) return
     const nodes = transformer.nodes()
     if (nodes.length === 0) return
@@ -866,6 +933,15 @@ export function useOverlay() {
     if (!(node instanceof Konva.Image)) return
 
     if (props.opacity !== undefined) node.opacity(props.opacity)
+    if (props.width !== undefined) {
+      node.width(Math.max(1, props.width))
+      node.scaleX(1)
+    }
+    if (props.height !== undefined) {
+      node.height(Math.max(1, props.height))
+      node.scaleY(1)
+    }
+    if (props.rotation !== undefined) node.rotation(props.rotation)
 
     layer?.draw()
     syncImageFormattingState(node)
@@ -1048,6 +1124,8 @@ export function useOverlay() {
           fontStyle: overlay.data.fontStyle,
           textDecoration: overlay.data.textDecoration,
           align: overlay.data.align,
+          width: overlay.width,
+          height: overlay.height,
           rotation: overlay.rotation,
         })
       }
@@ -1056,6 +1134,8 @@ export function useOverlay() {
         await addImage(overlay.data.src, {
           x: overlay.x,
           y: overlay.y,
+          width: overlay.width,
+          height: overlay.height,
           rotation: overlay.rotation,
           opacity: overlay.data.opacity,
         })
