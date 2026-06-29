@@ -71,7 +71,7 @@ export function usePayment() {
 
       state.clientSecret = response.clientSecret
       state.paymentIntentId = response.paymentIntentId
-      state.isMock = response.isMock ?? false
+      state.isMock = true
 
       return true
     }
